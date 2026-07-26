@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCmbVwwSd5GjyhY1MkF_oSkB7SEaORgLyU",
-  authDomain: authDomain: "flow-space-theta.vercel.app", // Вместо matrix-hr-3ba0a.firebaseapp.com
+authDomain: "flow-space-theta.vercel.app",
   projectId: "matrix-hr-3ba0a",
   storageBucket: "matrix-hr-3ba0a.firebasestorage.app",
   messagingSenderId: "960958272528",
@@ -15,3 +15,4 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider(); // Создали и экспортируем провайдер Google
 export const db = getFirestore(app);
+}
