@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCmbVwwSd5GjyhY1MkF_oSkB7SEaORgLyU",
-  authDomain: "matrix-hr-3ba0a.firebaseapp.com", // Правильный домен Firebase
+  authDomain: "matrix-hr-3ba0a.firebaseapp.com", // Твой правильный домен Firebase
   projectId: "matrix-hr-3ba0a",
   storageBucket: "matrix-hr-3ba0a.firebasestorage.app",
   messagingSenderId: "960958272528",
