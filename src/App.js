@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, googleProvider } from './firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 // 🌍 СЛОВАРЬ ПЕРЕВОДОВ
@@ -63,7 +63,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(false); // По умолчанию регистрация
   const [authError, setAuthError] = useState('');
 
   const [role, setRole] = useState(null); 
@@ -106,7 +106,6 @@ export default function App() {
     if (isDark) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [isDark]);
-  
   useEffect(() => { localStorage.setItem('flowspace_lang', lang); }, [lang]);
 
   useEffect(() => {
@@ -139,7 +138,7 @@ export default function App() {
             const legacyArchive = data.archive || [];
             const legacyDeletedArchive = data.deletedArchive || []; 
             
-            // Добавляем тестовых сотрудников, если список пуст (только 1 менеджер или вообще никого)
+          // Добавляем тестовых сотрудников, если список пуст (только 1 менеджер или вообще никого)
             if (!data.assistants || data.assistants.length <= 1) {
               const fake1Id = 'test_emp_1';
               const fake2Id = 'test_emp_2';
@@ -183,14 +182,22 @@ export default function App() {
   const handleGoogleSignIn = async () => {
     setAuthError('');
     try {
-      await signInWithPopup(auth, googleProvider);
+      // Проверяем, мобильное ли это устройство
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // На телефоне делаем редирект (перенаправление)
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        // На компьютере оставляем всплывающее окно
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (error) { 
       setAuthError('Ошибка Google: ' + error.message); 
     }
   };
 
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
-  // ИСПРАВЛЕНИЕ: Удалено дублирование const themeBg
   const cardBg = isDark ? 'bg-[#161B22] border border-white/5 shadow-2xl shadow-black/40' : 'bg-white border border-slate-200/60 shadow-sm shadow-slate-200/40';
   const textMain = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
