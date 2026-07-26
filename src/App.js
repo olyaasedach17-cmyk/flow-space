@@ -178,29 +178,24 @@ export default function App() {
     } catch (error) { setAuthError('Ошибка: ' + error.message); }
   };
   
-  const handleGoogleSignIn = async () => {
+ const handleAuth = async (e) => {
+    e.preventDefault(); setAuthError('');
     try {
-      // Проверка на мобильное устройство, чтобы исправить ошибку Telegram
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        await signInWithPopup(auth, googleProvider);
-      }
-    } catch (error) { 
-      setAuthError('Ошибка Google: ' + error.message); 
-    }
+      if (isLogin) await signInWithEmailAndPassword(auth, email, password);
+      else await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) { setAuthError('Ошибка: ' + error.message); }
   };
+  
   const handleGoogleSignIn = async () => {
     setAuthError('');
     try {
-      // Убираем разделение на мобильные/ПК и используем Popup для всех
       await signInWithPopup(auth, googleProvider);
     } catch (error) { 
       setAuthError('Ошибка Google: ' + error.message); 
     }
   };
 
+  const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
   const cardBg = isDark ? 'bg-[#161B22] border border-white/5 shadow-2xl shadow-black/40' : 'bg-white border border-slate-200/60 shadow-sm shadow-slate-200/40';
   const textMain = isDark ? 'text-white' : 'text-slate-900';
