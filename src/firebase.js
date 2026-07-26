@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCmbVwwSd5GjyhY1MkF_oSkB7SEaORgLyU",
-  authDomain: "matrix-hr-3ba0a.firebaseapp.com",
+  authDomain: authDomain: "flow-space-theta.vercel.app", // Вместо matrix-hr-3ba0a.firebaseapp.com
   projectId: "matrix-hr-3ba0a",
   storageBucket: "matrix-hr-3ba0a.firebasestorage.app",
   messagingSenderId: "960958272528",

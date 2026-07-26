@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://matrix-hr-3ba0a.firebaseapp.com/__/auth/:path*"
+    }
+  ]
+}
