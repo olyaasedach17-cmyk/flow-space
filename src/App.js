@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, googleProvider } from './firebase';
-// ДОБАВИЛИ signInWithRedirect для телефонов
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, signInWithRedirect } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-
 // 🌍 СЛОВАРЬ ПЕРЕВОДОВ 
 const translations = {
   en: {
@@ -189,6 +187,15 @@ export default function App() {
       } else {
         await signInWithPopup(auth, googleProvider);
       }
+    } catch (error) { 
+      setAuthError('Ошибка Google: ' + error.message); 
+    }
+  };
+  const handleGoogleSignIn = async () => {
+    setAuthError('');
+    try {
+      // Убираем разделение на мобильные/ПК и используем Popup для всех
+      await signInWithPopup(auth, googleProvider);
     } catch (error) { 
       setAuthError('Ошибка Google: ' + error.message); 
     }
