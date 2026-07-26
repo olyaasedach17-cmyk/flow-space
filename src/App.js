@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, googleProvider } from './firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, signInWithRedirect } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithRedirect } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 // 🌍 СЛОВАРЬ ПЕРЕВОДОВ
@@ -29,7 +29,7 @@ const translations = {
     board: 'Кросс-борд', analytics: 'Аналитика и SLA', capacityTab: 'Загрузка', payrollTab: 'Финансы', playbooksTab: 'Регламенты',
     taskInput: 'Название задачи...', docLink: 'Ссылка на док-т (URL)', hours: 'Оценка (часы)', urgent: 'Срочно', important: 'Важно',
     createBtn: 'Создать задачу ↵', focus: 'Фокус дня', review: 'Ждут проверки', critical: 'Критично', strategy: 'Стратегия',
-    operations: 'Операционка', backlog: 'Бэклог', plan: 'План:', fact: 'Факт:', approve: 'Принять', reject: 'Вернуть', pending: 'Ожидает',
+    operations: 'Операционка', backlog: 'Бэклог', plan: 'План:', fact: 'Fact:', approve: 'Принять', reject: 'Вернуть', pending: 'Ожидает',
     start: 'Начать', pause: 'Пауза', delegate: 'Передать', edit: 'Изменить', del: 'Удалить', doc: 'Док', hideArc: 'Скрыть архив', showArc: 'Показать архив',
     empty: 'Нет задач', emptyArc: 'Нет записей', profile: 'Учетная запись', theme: 'Оформление', langMenu: 'Язык (Language)',
     upgrade: 'Тариф PRO', logout: 'Выйти', slaIndex: 'Индекс SLA', timeSaved: 'Сэкономлено', hrs: 'час', overdue: 'Просрочено:', due: 'Дедлайн:',
@@ -63,7 +63,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(false); // По умолчанию регистрация
+  const [isLogin, setIsLogin] = useState(false);
   const [authError, setAuthError] = useState('');
 
   const [role, setRole] = useState(null); 
@@ -81,7 +81,6 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isProModalOpen, setIsProModalOpen] = useState(false);
   
-  // СОСТОЯНИЕ ДЛЯ АДМИНКИ
   const [clientEmailToUpgrade, setClientEmailToUpgrade] = useState('');
 
   const [deleteModalTask, setDeleteModalTask] = useState(null); 
@@ -93,12 +92,9 @@ export default function App() {
   const [newUrgent, setNewUrgent] = useState(false);
   const [newImportant, setNewImportant] = useState(false);
   const [newAssignee, setNewAssignee] = useState(null);
-  const [isEditingRate, setIsEditingRate] = useState(false);
-  const [newRateValue, setNewRateValue] = useState('');
   const [editingRates, setEditingRates] = useState({}); 
   const [rateValues, setRateValues] = useState({});
 
-  // ⚠️ ВАЖНО: Впиши сюда свою почту, под которой ты зарегистрирована!
   const isSuperAdmin = user?.email?.toLowerCase() === 'olyaasedach17@gmail.com';
 
   useEffect(() => { 
@@ -138,7 +134,6 @@ export default function App() {
             const legacyArchive = data.archive || [];
             const legacyDeletedArchive = data.deletedArchive || []; 
             
-          // Добавляем тестовых сотрудников, если список пуст (только 1 менеджер или вообще никого)
             if (!data.assistants || data.assistants.length <= 1) {
               const fake1Id = 'test_emp_1';
               const fake2Id = 'test_emp_2';
@@ -179,19 +174,11 @@ export default function App() {
     } catch (error) { setAuthError('Ошибка: ' + error.message); }
   };
 
+  // НАДЕЖНЫЙ ВХОД ЧЕРЕЗ РЕДИРЕКТ НА ВСЕХ УСТРОЙСТВАХ
   const handleGoogleSignIn = async () => {
     setAuthError('');
     try {
-      // Проверяем, мобильное ли это устройство
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // На телефоне делаем редирект (перенаправление)
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        // На компьютере оставляем всплывающее окно
-        await signInWithPopup(auth, googleProvider);
-      }
+      await signInWithRedirect(auth, googleProvider);
     } catch (error) { 
       setAuthError('Ошибка Google: ' + error.message); 
     }
@@ -289,7 +276,6 @@ export default function App() {
     const deadline = e.target.elements.deadlineInput.value;
     const hours = parseFloat(e.target.elements.hoursInput.value) || 0;
     
-    // Берем выбранного по кнопке сотрудника, а если не нажали — оставляем текущего
     const assigneeId = newAssignee || sCurrentId;
     
     if (!input.trim()) return;
@@ -390,12 +376,6 @@ export default function App() {
   };
 
   const handleScoreChange = (id, newScore) => updateWorkspace({ kpis: kpis.map(k => String(k.id) === String(id) ? { ...k, score: Number(newScore) } : k) });
-  
-  const handleSaveRate = () => {
-    const newNum = parseFloat(newRateValue);
-    if (!isNaN(newNum) && newNum >= 0) updateWorkspace({ baseRate: newNum });
-    setIsEditingRate(false);
-  };
 
   const handleSaveAssistantRate = (astId) => {
     const newNum = parseFloat(rateValues[astId]);
@@ -410,16 +390,12 @@ export default function App() {
 
   const totalEfficiency = kpis.reduce((sum, kpi) => sum + ((kpi.score / kpi.max) * kpi.weight), 0).toFixed(1);
   const pendingTasks = tasks.filter(t => t.status !== 'review');
-  const reviewTasks = tasks.filter(t => t.status === 'review');
   const focusTasks = pendingTasks.filter(t => t.isFocus);
   
   const totalPendingHours = pendingTasks.reduce((acc, task) => acc + (parseFloat(task.estimatedHours) || 0), 0);
   const maxCapacity = 40;
   const capacityPercent = Math.min((totalPendingHours / maxCapacity) * 100, 100);
   const capacityColor = totalPendingHours > maxCapacity ? 'bg-red-500' : (totalPendingHours > 30 ? 'bg-amber-500' : 'bg-emerald-500');
-
-  const payoutMultiplier = totalEfficiency / 100;
-  const totalPayout = baseRate * payoutMultiplier;
 
   const ProLock = () => (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-8">
@@ -472,7 +448,6 @@ export default function App() {
                        <p className={`font-bold truncate mt-1 text-sm ${textMain}`}>{user.email}</p>
                     </div>
                     
-                    {/* ПАНЕЛЬ СОЗДАТЕЛЯ (ВИДНА ТОЛЬКО ТЕБЕ) */}
                     {isSuperAdmin && (
                       <div className={`p-3 border-b ${isDark ? 'border-white/5 bg-amber-500/10' : 'border-slate-100 bg-amber-50'}`}>
                          <p className="text-[10px] font-black uppercase text-amber-500 mb-2">💎 Панель Создателя</p>
@@ -520,7 +495,6 @@ export default function App() {
             <button onClick={() => setActiveTab('matrix')} className={`pb-2 font-semibold text-sm transition-all border-b-2 ${activeTab === 'matrix' ? (isDark ? 'border-white text-white' : 'border-slate-900 text-slate-900') : 'border-transparent text-slate-400 hover:text-slate-500'}`}>{t('board')}</button>
             <button onClick={() => setActiveTab('kpi')} className={`pb-2 font-semibold text-sm transition-all border-b-2 ${activeTab === 'kpi' ? (isDark ? 'border-white text-white' : 'border-slate-900 text-slate-900') : 'border-transparent text-slate-400 hover:text-slate-500'}`}>{t('analytics')}</button>
             
-            {/* Ограничиваем просмотр этих вкладок для сотрудников (видят только Менеджеры) */}
             {role === 'manager' && (
               <>
                 <button onClick={() => setActiveTab('capacity')} className={`pb-2 font-semibold text-sm transition-all border-b-2 flex items-center gap-1.5 ${activeTab === 'capacity' ? (isDark ? 'border-white text-white' : 'border-slate-900 text-slate-900') : 'border-transparent text-slate-400 hover:text-slate-500'}`}>
@@ -558,7 +532,6 @@ export default function App() {
               </form>
             </div>
             
-            {/* ДОБАВЛЕНО: ВЫБОР СОТРУДНИКА */}
             {role === 'manager' && (
               <div className="flex flex-wrap items-center gap-2 pt-2 pb-2">
                 <span className={`text-[10px] font-bold uppercase tracking-widest mr-2 ${textMuted}`}>Исполнитель:</span>
@@ -594,7 +567,6 @@ export default function App() {
               <Quadrant title={t('backlog')} dotColor="bg-slate-400" tasks={pendingTasks.filter(t => !t.urgent && !t.important && !t.isFocus)} role={role} isDark={isDark} t={t} onReview={handleSendToReview} onDelete={setDeleteModalTask} onEdit={openEditModal} openDelegate={role === 'manager' ? openDelegateModal : null} onToggleTimer={handleToggleTimer} onToggleFocus={handleToggleFocus} onToggleSubtask={handleToggleSubtask} lang={lang} />
             </div>
 
-            {/* БЛОК АРХИВА */}
             <div className="flex justify-center pt-10 pb-4">
               <button onClick={() => setShowArchive(!showArchive)} className={`font-semibold text-xs tracking-wide flex items-center gap-2 transition-all px-4 py-2 rounded-lg border ${isDark ? 'bg-transparent border-white/10 text-slate-400 hover:text-white' : 'bg-transparent border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
                 {showArchive ? t('hideArc') : t('showArc')}
@@ -836,7 +808,6 @@ export default function App() {
           </div>
         )}
 
-        {/* PRO MODAL */}
         {isProModalOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[80] animate-in fade-in">
             <div className={`rounded-3xl p-8 max-w-sm w-full shadow-2xl relative overflow-hidden ${isDark ? 'bg-[#0E1116] border border-white/10' : 'bg-white border border-slate-200'}`}>
