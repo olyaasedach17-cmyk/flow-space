@@ -1,17 +1,18 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, browserLocalPersistence, indexedDBLocalPersistence, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  // Ваши ключи Firebase...
+  apiKey: "AIzaSyCmbVwwSd5GjyhY1MkF_oSkB7SEaORgLyU",
+  authDomain: "matrix-hr-3ba0a.firebaseapp.com", // Правильный домен Firebase
+  projectId: "matrix-hr-3ba0a",
+  storageBucket: "matrix-hr-3ba0a.firebasestorage.app",
+  messagingSenderId: "960958272528",
+  appId: "1:960958272528:web:f9ac947c37bc539e0a6695"
 };
 
 const app = initializeApp(firebaseConfig);
 
-// 🌟 ВАЖНО: Вместо обычного getAuth(app) используем инициализацию с защищенной памятью IndexedDB
-export const auth = initializeAuth(app, {
-  persistence: [indexedDBLocalPersistence, browserLocalPersistence]
-});
-
-export const db = getFirestore(app);
+export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
