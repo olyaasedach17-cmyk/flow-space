@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, googleProvider } from './firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithRedirect } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 // 🌍 СЛОВАРЬ ПЕРЕВОДОВ
@@ -65,6 +65,9 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(false);
   const [authError, setAuthError] = useState('');
+  
+  // 🌟 Новое состояние для блокировки кнопки от двойных кликов
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const [role, setRole] = useState(null); 
   const [employeeLink, setEmployeeLink] = useState(null); 
@@ -174,13 +177,21 @@ export default function App() {
     } catch (error) { setAuthError('Ошибка: ' + error.message); }
   };
 
-  // НАДЕЖНЫЙ ВХОД ЧЕРЕЗ РЕДИРЕКТ НА ВСЕХ УСТРОЙСТВАХ
+  // 🌟 ИСПРАВЛЕННАЯ ФУНКЦИЯ ВХОДА ЧЕРЕЗ GOOGLE
   const handleGoogleSignIn = async () => {
+    if (isGoogleLoading) return; // Запрещаем нажимать повторно
+    
+    setIsGoogleLoading(true);
     setAuthError('');
     try {
-      await signInWithRedirect(auth, googleProvider);
-    } catch (error) { 
-      setAuthError('Ошибка Google: ' + error.message); 
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      // Игнорируем ошибки, если пользователь сам закрыл окно крестиком
+      if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+        setAuthError('Ошибка Google: ' + error.message); 
+      }
+    } finally {
+      setIsGoogleLoading(false); // Разблокируем кнопку, если окно закрылось
     }
   };
 
@@ -230,7 +241,14 @@ export default function App() {
           </button>
         </div>
         <div className="mt-4 flex gap-2">
-            <button type="button" onClick={handleGoogleSignIn} className={`flex-1 font-bold py-4 rounded-xl transition-all border ${isDark ? 'bg-transparent border-white/10 hover:bg-white/5 text-slate-300' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'}`}>{t('contGoogle')}</button>
+            <button 
+              type="button" 
+              onClick={handleGoogleSignIn} 
+              disabled={isGoogleLoading}
+              className={`flex-1 font-bold py-4 rounded-xl transition-all border ${isDark ? 'bg-transparent border-white/10 text-slate-300' : 'bg-white border-slate-200 text-slate-700'} ${isGoogleLoading ? 'opacity-50 cursor-not-allowed' : (isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50')}`}
+            >
+              {isGoogleLoading ? 'Загрузка...' : t('contGoogle')}
+            </button>
             <button type="button" onClick={() => setLang(lang === 'ru' ? 'en' : 'ru')} className={`px-4 font-bold rounded-xl transition-all border ${isDark ? 'bg-transparent border-white/10 hover:bg-white/5 text-slate-300' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'}`}>{lang.toUpperCase()}</button>
         </div>
       </div>
