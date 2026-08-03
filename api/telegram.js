@@ -75,21 +75,15 @@ export default async function handler(req, res) {
         
         aiResponseText = aiResult.reply;
 
-        // 3. СОХРАНЕНИЕ В БАЗУ (С привязкой к конкретному юзеру!)
+ // 3. СОХРАНЕНИЕ В БАЗУ (С правильными полями для фронтенда!)
         await db.collection('tasks').add({
-          title: aiResult.title,
+          text: aiResult.title, // Заменили title на text
           time: aiResult.time,
+          status: 'todo',       // Добавили статус по умолчанию
           createdAt: FieldValue.serverTimestamp(),
           source: 'telegram',
-          userId: targetUserId // ТА САМАЯ МАГИЧЕСКАЯ СВЯЗКА
+          userId: targetUserId
         });
-      }
-    }
-
-  } catch (error) {
-    console.error("Ошибка в процессе обработки:", error);
-    aiResponseText = `Произошла ошибка: ${error.message}`;
-  }
 
   // ОТПРАВКА ОТВЕТА В ТЕЛЕГРАМ
   const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
