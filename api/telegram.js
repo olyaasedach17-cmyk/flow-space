@@ -1,6 +1,26 @@
+import admin from 'firebase-admin';
+
+// Инициализируем базу данных (проверяем, чтобы не запускать дважды)
+if (!admin.apps.length) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        // Обязательный фикс для правильного чтения ключа в Vercel
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+  } catch (error) {
+    console.error('Ошибка инициализации Firebase:', error);
+  }
+}
+
+const db = admin.firestore();
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(200).send('Мозг бота Flow Space успешно запущен и готов к работе с ИИ!');
+    return res.status(200).send('Мозг бота готов к сохранению задач!');
   }
 
   const body = req.body;
@@ -17,7 +37,7 @@ export default async function handler(req, res) {
   let aiResponseText = "";
 
   try {
-    // 🔴 ИЗМЕНЕНИЕ ЗДЕСЬ: Теперь бот стучится на сервер proxyapi.ru
+    // 1. Просим ИИ выдать ответ в формате JSON (для базы данных)
     const aiResponse = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -29,7 +49,7 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content: 'Ты ассистент-планировщик. Твоя задача — прочитать сообщение пользователя, выделить из него суть задачи, сроки (если есть) и коротко подтвердить, что задача понята. Отвечай дружелюбно и коротко.'
+            content: 'Ты ассистент. Пользователь пишет тебе задачу. Твоя цель — вернуть ответ СТРОГО в формате JSON. Формат: {"title": "Краткое название задачи", "time": "Время или дата (если есть, иначе null)", "reply": "Короткий дружелюбный ответ пользователю, что задача записана"}. Никакого другого текста, кроме JSON, быть не должно.'
           },
           { role: 'user', content: userText }
         ]
@@ -39,17 +59,29 @@ export default async function handler(req, res) {
     const aiData = await aiResponse.json();
 
     if (!aiResponse.ok) {
-      console.error("ProxyAPI вернул ошибку:", JSON.stringify(aiData));
-      aiResponseText = `Ответ от ИИ заблокирован. Причина: ${aiData.error?.message || 'Неизвестная ошибка'}`;
+      aiResponseText = `Ошибка ИИ: ${aiData.error?.message || 'Неизвестно'}`;
     } else {
-      aiResponseText = aiData.choices[0].message.content;
+      // 2. Расшифровываем JSON от нейросети
+      const aiResultString = aiData.choices[0].message.content;
+      const aiResult = JSON.parse(aiResultString);
+      
+      aiResponseText = aiResult.reply;
+
+      // 3. Сохраняем готовую задачу в твою базу данных Firebase (в коллекцию tasks)
+      await db.collection('tasks').add({
+        title: aiResult.title,
+        time: aiResult.time,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        source: 'telegram'
+      });
     }
 
   } catch (error) {
-    console.error("Ошибка при запросе к ProxyAPI:", error);
-    aiResponseText = "Связь с ИИ прервалась на половине пути.";
+    console.error("Ошибка в процессе обработки:", error);
+    aiResponseText = "Произошла ошибка при сохранении задачи в базу данных.";
   }
 
+  // 4. Отправляем ответ в Телеграм
   const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
   await fetch(telegramUrl, {
     method: 'POST',
