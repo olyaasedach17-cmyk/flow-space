@@ -1,4 +1,4 @@
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 
 // Инициализация базы данных через единый JSON
 if (!admin.apps.length) {
