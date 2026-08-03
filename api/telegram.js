@@ -1,19 +1,20 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-// Инициализация базы данных через единый JSON
-if (!admin.apps.length) {
+// Современная инициализация базы данных
+if (!getApps().length) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    initializeApp({
+      credential: cert(serviceAccount),
     });
   } catch (error) {
     console.error('Ошибка инициализации Firebase:', error);
   }
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
       await db.collection('tasks').add({
         title: aiResult.title,
         time: aiResult.time,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         source: 'telegram'
       });
     }
