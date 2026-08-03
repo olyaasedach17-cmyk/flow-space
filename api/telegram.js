@@ -1,15 +1,12 @@
 import admin from 'firebase-admin';
 
-// Инициализируем базу данных (проверяем, чтобы не запускать дважды)
+// Инициализация базы данных через единый JSON
 if (!admin.apps.length) {
   try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    
     admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        // Обязательный фикс для правильного чтения ключа в Vercel
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
+      credential: admin.credential.cert(serviceAccount),
     });
   } catch (error) {
     console.error('Ошибка инициализации Firebase:', error);
@@ -20,7 +17,7 @@ const db = admin.firestore();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(200).send('Мозг бота готов к сохранению задач!');
+    return res.status(200).send('Мозг бота готов к работе с базой!');
   }
 
   const body = req.body;
@@ -37,7 +34,10 @@ export default async function handler(req, res) {
   let aiResponseText = "";
 
   try {
-    // 1. Просим ИИ выдать ответ в формате JSON (для базы данных)
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+       throw new Error("Не найден ключ FIREBASE_SERVICE_ACCOUNT в Vercel!");
+    }
+
     const aiResponse = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -61,13 +61,11 @@ export default async function handler(req, res) {
     if (!aiResponse.ok) {
       aiResponseText = `Ошибка ИИ: ${aiData.error?.message || 'Неизвестно'}`;
     } else {
-      // 2. Расшифровываем JSON от нейросети
       const aiResultString = aiData.choices[0].message.content;
       const aiResult = JSON.parse(aiResultString);
       
       aiResponseText = aiResult.reply;
 
-      // 3. Сохраняем готовую задачу в твою базу данных Firebase (в коллекцию tasks)
       await db.collection('tasks').add({
         title: aiResult.title,
         time: aiResult.time,
@@ -78,10 +76,9 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Ошибка в процессе обработки:", error);
-    aiResponseText = "Произошла ошибка при сохранении задачи в базу данных.";
+    aiResponseText = `Произошла ошибка: ${error.message}`;
   }
 
-  // 4. Отправляем ответ в Телеграм
   const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
   await fetch(telegramUrl, {
     method: 'POST',
