@@ -17,7 +17,8 @@ export default async function handler(req, res) {
   let aiResponseText = "";
 
   try {
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    // 🔴 ИЗМЕНЕНИЕ ЗДЕСЬ: Теперь бот стучится на сервер proxyapi.ru
+    const aiResponse = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -37,17 +38,15 @@ export default async function handler(req, res) {
 
     const aiData = await aiResponse.json();
 
-    // Проверяем, ответил ли OpenAI успешно
     if (!aiResponse.ok) {
-      console.error("OpenAI вернул ошибку:", JSON.stringify(aiData));
+      console.error("ProxyAPI вернул ошибку:", JSON.stringify(aiData));
       aiResponseText = `Ответ от ИИ заблокирован. Причина: ${aiData.error?.message || 'Неизвестная ошибка'}`;
     } else {
-      // Если всё хорошо, читаем ответ
       aiResponseText = aiData.choices[0].message.content;
     }
 
   } catch (error) {
-    console.error("Ошибка при запросе к OpenAI:", error);
+    console.error("Ошибка при запросе к ProxyAPI:", error);
     aiResponseText = "Связь с ИИ прервалась на половине пути.";
   }
 
