@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, googleProvider } from './firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 // ==========================================
 // 1. СЛОВАРЬ ПЕРЕВОДОВ И КОНСТАНТЫ
@@ -9,7 +9,7 @@ import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 const translations = {
   ru: {
     loginTitle: 'Корпоративная система', signIn: 'Войти', createAccount: 'Создать аккаунт',
-    board: 'Задачи', projects: 'Проекты', analytics: 'Аналитика', team: 'Команда', playbooksTab: 'База',
+    board: 'Задачи', projects: 'Проекты', analytics: 'Аналитика', team: 'Команда', playbooksTab: 'База', archiveTab: 'Архив',
     aiProcesses: 'Ассистент', more: 'Ещё', profileTab: 'Профиль',
     taskInput: 'Название задачи...', hours: 'Оценка (часы)', createBtn: 'Создать задачу ↵',
     colTodo: 'Нужно сделать', colInProgress: 'В процессе', colReview: 'На проверке', colDeferred: 'Отложено',
@@ -39,7 +39,7 @@ const aiOptions = [
 // ==========================================
 // 2. ВЫДЕЛЕННЫЕ КОМПОНЕНТЫ
 // ==========================================
-function TaskCard({ task, role, isDark, t, onMove, onDelete }) {
+function TaskCard({ task, role, isDark, t, onMove, onDelete, onEdit, onRestore }) {
   const cardBase = task.urgent ? (isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50/50 border-red-100') : 
                    (isDark ? 'bg-[#161B22] border-white/5' : 'bg-white border-slate-200');
   const textMain = isDark ? 'text-slate-200' : 'text-slate-800';
@@ -67,14 +67,21 @@ function TaskCard({ task, role, isDark, t, onMove, onDelete }) {
             <button onClick={() => onMove(task.id, 'in_progress')} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-red-500 text-white hover:bg-red-600">Вернуть</button></>
           )}
           {task.status === 'deferred' && <button onClick={() => onMove(task.id, 'todo')} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${isDark ? 'bg-white/10 text-white' : 'bg-slate-200 text-slate-700'}`}>Вернуть</button>}
+          {task.status === 'done' && <button onClick={() => onRestore(task)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>Восстановить</button>}
         </div>
-        <button onClick={() => onDelete(task)} className={`text-xs p-1.5 rounded-md ${isDark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-600'}`}>🗑</button>
+        
+        <div className="flex gap-1 ml-auto">
+          {task.status !== 'done' && (
+            <button onClick={() => onEdit(task)} className={`text-xs p-1.5 rounded-md ${isDark ? 'text-slate-500 hover:text-indigo-400' : 'text-slate-400 hover:text-indigo-600'}`}>✏️</button>
+          )}
+          <button onClick={() => onDelete(task)} className={`text-xs p-1.5 rounded-md ${isDark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-600'}`}>🗑</button>
+        </div>
       </div>
     </div>
   );
 }
 
-function TaskColumn({ title, colorClass, tasks, role, isDark, t, onMove, onDelete, onShowOnboarding }) {
+function TaskColumn({ title, colorClass, tasks, role, isDark, t, onMove, onDelete, onEdit, onShowOnboarding }) {
   return (
     <div className={`flex flex-col`}>
       <div className="flex items-center gap-2 mb-4 px-1">
@@ -92,7 +99,7 @@ function TaskColumn({ title, colorClass, tasks, role, isDark, t, onMove, onDelet
             )}
           </div>
         ) : (
-          tasks.map(task => <TaskCard key={task.id} task={task} role={role} isDark={isDark} t={t} onMove={onMove} onDelete={onDelete} />)
+          tasks.map(task => <TaskCard key={task.id} task={task} role={role} isDark={isDark} t={t} onMove={onMove} onDelete={onDelete} onEdit={onEdit} />)
         )}
       </div>
     </div>
@@ -120,6 +127,8 @@ export default function App() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null); 
+  
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskHours, setNewTaskHours] = useState('');
@@ -128,7 +137,7 @@ export default function App() {
   const [isTaskGenerating, setIsTaskGenerating] = useState(false);
   const [isListening, setIsListening] = useState(false);
 
-  // Состояния для Пульта управления (Команда)
+  // Состояния для Пульта управления
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('worker');
@@ -170,10 +179,22 @@ export default function App() {
     const docRef = doc(db, 'users', user.uid);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setRole('manager'); setDocData(docSnap.data());
+        const data = docSnap.data();
+        setRole('manager'); 
+        setDocData(data);
         if (!currentAssistantId) setCurrentAssistantId('manager');
+        
+        // Подтягиваем настройки, если они уже сохранены
+        if (data.settings?.teamSize) setOnboardTeam(data.settings.teamSize);
+        if (data.settings?.niche) setOnboardNiche(data.settings.niche);
+
       } else {
-        setDoc(docRef, { email: user.email.toLowerCase(), assistants: [{ id: 'manager', name: '👑' }], workspaces: { 'manager': { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } } });
+        setDoc(docRef, { 
+          email: user.email.toLowerCase(), 
+          settings: { isTeamMode: true }, // По умолчанию командный режим включен
+          assistants: [{ id: 'manager', name: '👑' }], 
+          workspaces: { 'manager': { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } } 
+        });
       }
     });
     return () => unsubscribe();
@@ -198,6 +219,14 @@ export default function App() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      alert('Ошибка входа через Google: ' + error.message);
+    }
+  };
+
   const handleResetPassword = async () => {
     if (!email) return alert('Пожалуйста, введите ваш Email в поле выше, чтобы мы знали, куда отправить ссылку.');
     try {
@@ -207,13 +236,6 @@ export default function App() {
       alert('Ошибка при сбросе пароля: ' + error.message);
     }
   };
-  const signInWithGoogle = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      alert('Ошибка входа через Google: ' + error.message);
-    }
-  };
 
   const currentWorkspace = docData?.workspaces?.[currentAssistantId] || {};
   const tasks = currentWorkspace.tasks || [];
@@ -221,6 +243,7 @@ export default function App() {
   const kpis = currentWorkspace.kpis || defaultKpis;
   const savedTime = currentWorkspace.savedTime || 0;
   const assistants = docData?.assistants || [];
+  const isTeamMode = docData?.settings?.isTeamMode ?? true; // 👤 РЕЖИМ СОЛО ИЛИ КОМАНДА
   
   const totalEfficiency = kpis.reduce((sum, kpi) => sum + ((kpi.score / kpi.max) * kpi.weight), 0).toFixed(1);
   const totalPendingHours = tasks.filter(t => t.status !== 'done').reduce((acc, task) => acc + (parseFloat(task.estimatedHours) || 0), 0);
@@ -234,11 +257,11 @@ export default function App() {
 
   const updateWorkspace = (newData) => setDoc(doc(db, 'users', user.uid), { workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } } }, { merge: true });
 
-  // ⚠️ СЮДА ВСТАВЛЯЙ СВОЙ НОВЫЙ КЛЮЧ ОТ PROXYAPI
-  const apiKey = process.env.REACT_APP_OPENAI_API_KEY;
+  // 🔐 БЕЗОПАСНЫЙ КЛЮЧ
+  const apiKey = process.env.REACT_APP_OPENAI_API_KEY; 
 
-const handleRunAIAgent = async () => {
-    if (apiKey === "ВСТАВЬ_СЮДА_СВОЙ_НОВЫЙ_КЛЮЧ") return alert('Вставьте ключ API!');
+  const handleRunAIAgent = async () => {
+    if (!apiKey) return alert('Ключ API не найден в настройках Vercel!');
     
     const tasksToProcess = tasks.filter(t => t.status === 'todo' && (!t.description || parseFloat(t.estimatedHours) === 0));
     if (tasksToProcess.length === 0) {
@@ -247,12 +270,9 @@ const handleRunAIAgent = async () => {
     
     setIsAgentRunning(true);
     const targetTask = tasksToProcess[0];
-
-    // 🧠 1. Собираем список команды, чтобы ИИ знал, кому поручить задачу
     const teamList = assistants.map(a => a.name).join(', ');
 
     try {
-      // 🧠 2. Обновляем промпт: теперь ИИ обязан выбрать исполнителя
       const systemPrompt = `Ты — автономный менеджер проектов. Пользователь набросал задачу: "${targetTask.text}".
       Твоя команда: ${teamList}. Выбери наиболее подходящего исполнителя исходя из сути задачи.
       ОТВЕТЬ СТРОГО В ФОРМАТЕ JSON: 
@@ -277,16 +297,10 @@ const handleRunAIAgent = async () => {
         if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiResult = JSON.parse(rawContent);
         
-        // 🧠 3. ПЕРЕКЛАДЫВАЕМ ЗАДАЧУ В НУЖНЫЙ ЯЩИК (Новая магия!)
         const targetAssistant = assistants.find(a => a.name === aiResult.assignee);
 
-        // Если ИИ выбрал сотрудника, и это не мы сами
         if (targetAssistant && targetAssistant.id !== currentAssistantId) {
-          
-          // 1. Вырезаем задачу из твоего текущего списка
           const remainingTasks = tasks.filter(t => String(t.id) !== String(targetTask.id));
-          
-          // 2. Готовим готовую, расписанную карточку задачи
           const updatedTask = {
             ...targetTask,
             description: `${aiResult.description || targetTask.description}`,
@@ -295,23 +309,20 @@ const handleRunAIAgent = async () => {
             important: aiResult.important
           };
 
-          // 3. Достаем "ящик" сотрудника (например, Ани)
           const assistantWorkspace = docData.workspaces[targetAssistant.id] || { tasks: [] };
           const assistantTasks = assistantWorkspace.tasks || [];
 
-          // 4. Обновляем базу данных: сохраняем сразу обе папки!
           await setDoc(doc(db, 'users', user.uid), {
             workspaces: {
               ...docData.workspaces,
-              [currentAssistantId]: { ...currentWorkspace, tasks: remainingTasks }, // Твоя папка худеет на 1 задачу
-              [targetAssistant.id]: { ...assistantWorkspace, tasks: [updatedTask, ...assistantTasks] } // Папка Ани толстеет на 1 задачу
+              [currentAssistantId]: { ...currentWorkspace, tasks: remainingTasks }, 
+              [targetAssistant.id]: { ...assistantWorkspace, tasks: [updatedTask, ...assistantTasks] }
             }
           }, { merge: true });
 
           alert(`Агент перенес задачу в пространство сотрудника: ${aiResult.assignee}!`);
         
         } else {
-          // Если ИИ никого не выбрал (или выбрал тебя), оставляем задачу в твоей папке
           updateWorkspace({ 
             tasks: tasks.map(t => String(t.id) === String(targetTask.id) ? {
               ...t, 
@@ -331,6 +342,7 @@ const handleRunAIAgent = async () => {
       setIsAgentRunning(false); 
     }
   };
+
   const handleInviteColleague = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
@@ -345,13 +357,13 @@ const handleRunAIAgent = async () => {
   };
   
   const handleGenerateTeamReport = async () => {
-    if (apiKey === "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ") return alert('sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ');
+    if (!apiKey) return alert('Ключ API не найден!');
     setIsGeneratingReport(true);
     try {
       const systemPrompt = `Ты — операционный директор (COO). Проанализируй данные:
       SLA: ${totalEfficiency}%. Бэклог: ${todoTasks.length}. В работе: ${inProgressTasks.length}. На проверке: ${reviewTasks.length}. Загрузка: ${totalPendingHours}ч.
       Напиши краткий отчет в 3 абзаца: 1. Оценка. 2. Риски. 3. Совет руководителю.`;
-      const response = await fetch('[https://api.proxyapi.ru/openai/v1/chat/completions](https://api.proxyapi.ru/openai/v1/chat/completions)', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: systemPrompt }], temperature: 0.6 }) });
+      const response = await fetch('[https://api.proxyapi.ru/openai/v1/chat/completions](https://api.proxyapi.ru/openai/v1/chat/completions)', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }], temperature: 0.6 }) });
       const data = await response.json();
       if (data.choices) setTeamReport(data.choices[0].message.content.trim());
     } catch (error) {} finally { setIsGeneratingReport(false); }
@@ -371,12 +383,12 @@ const handleRunAIAgent = async () => {
 
   const handleTaskAI = async (mode) => {
     if (!newTaskTitle.trim()) return alert('Сначала напишите короткую суть задачи!');
-    if (apiKey === "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ") return alert('Вставьте ключ!');
+    if (!apiKey) return alert('Вставьте ключ!');
     setIsTaskGenerating(true);
     
     try {
       let systemPrompt = mode === 'expand' ? 'Пользователь написал идею. Преврати её в структурированную задачу.' : 'Разбей задачу на пошаговый чек-лист. Используй маркдаун списки.';
-      const response = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', { 
+      const response = await fetch('[https://api.proxyapi.ru/openai/v1/chat/completions](https://api.proxyapi.ru/openai/v1/chat/completions)', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
         body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: newTaskTitle }], temperature: 0.5 }) 
@@ -384,15 +396,13 @@ const handleRunAIAgent = async () => {
       
       const data = await response.json();
       
-      // Если нейросеть ответила текстом:
       if (data.choices) {
         setNewTaskDesc(data.choices[0].message.content.trim());
       } else {
-        // Если нейросеть выдала ошибку (нет денег, неверный ключ и т.д.):
         alert('Ответ от сервера ИИ: ' + JSON.stringify(data)); 
       }
     } catch (error) { 
-      alert('Ошибка интернета/сети: ' + error.message); 
+      alert('Ошибка сети: ' + error.message); 
     } finally { 
       setIsTaskGenerating(false); 
     }
@@ -400,7 +410,7 @@ const handleRunAIAgent = async () => {
 
   const handleGenerateProcess = async () => {
     if (!processTopic.trim()) return alert('Опишите, что вам нужно сгенерировать.');
-    if (apiKey === "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ") return alert('Вставьте ключ!');
+    if (!apiKey) return alert('Ключ API не найден!');
     setIsProcessGenerating(true);
     try {
       let systemPrompt = '';
@@ -418,16 +428,58 @@ const handleRunAIAgent = async () => {
     } catch (error) {} finally { setIsProcessGenerating(false); }
   };
 
-  const handleStartTutorial = () => {
+  // 👤 СОХРАНЕНИЕ НАСТРОЕК (Режим Соло или Команда)
+  const handleSaveSettings = async () => {
     if (!onboardNiche || !onboardTeam) return alert('Выберите нишу и команду!');
-    setShowOnboarding(false); setTutorialStep(1); setShowTutorial(true);
+    
+    // Если выбрано "Я один", выключаем командный режим
+    const mode = onboardTeam !== '👤 Я один';
+    
+    await setDoc(doc(db, 'users', user.uid), { 
+      settings: { isTeamMode: mode, niche: onboardNiche, teamSize: onboardTeam } 
+    }, { merge: true });
+    
+    setShowOnboarding(false);
+    
+    // Если еще не показывали туториал, показываем
+    if (!docData?.settings) {
+      setTutorialStep(1); 
+      setShowTutorial(true);
+    }
+  };
+
+  const handleOpenEdit = (task) => {
+    setEditingTaskId(task.id);
+    setNewTaskTitle(task.text);
+    setNewTaskDesc(task.description || '');
+    setNewTaskHours(task.estimatedHours || '');
+    setNewUrgent(task.urgent || false);
+    setNewImportant(task.important || false);
+    setIsCreateOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    setIsCreateOpen(false);
+    setEditingTaskId(null);
+    setNewTaskTitle(''); setNewTaskDesc(''); setNewTaskHours(''); setNewUrgent(false); setNewImportant(false);
   };
 
   const handleAddTask = (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
-    updateWorkspace({ tasks: [{ id: Date.now(), text: newTaskTitle, description: newTaskDesc, status: 'todo', estimatedHours: parseFloat(newTaskHours) || 0, urgent: newUrgent, important: newImportant }, ...tasks] });
-    setNewTaskTitle(''); setNewTaskDesc(''); setNewTaskHours(''); setNewUrgent(false); setNewImportant(false); setIsCreateOpen(false); 
+
+    if (editingTaskId) {
+      updateWorkspace({ 
+        tasks: tasks.map(t => String(t.id) === String(editingTaskId) ? { 
+          ...t, text: newTaskTitle, description: newTaskDesc, estimatedHours: parseFloat(newTaskHours) || 0, urgent: newUrgent, important: newImportant 
+        } : t) 
+      });
+    } else {
+      updateWorkspace({ 
+        tasks: [{ id: Date.now(), text: newTaskTitle, description: newTaskDesc, status: 'todo', estimatedHours: parseFloat(newTaskHours) || 0, urgent: newUrgent, important: newImportant }, ...tasks] 
+      });
+    }
+    closeCreateModal(); 
   };
 
   const handleMoveTask = (id, newStatus) => {
@@ -436,7 +488,22 @@ const handleRunAIAgent = async () => {
     if (newStatus === 'done') { updateWorkspace({ archive: [{ ...task, status: 'done' }, ...archive], tasks: tasks.filter(t => String(t.id) !== String(id)) }); return; }
     updateWorkspace({ tasks: tasks.map(t => String(t.id) === String(id) ? { ...t, status: newStatus } : t) });
   };
-  const handleDelete = (task) => updateWorkspace({ tasks: tasks.filter(t => String(t.id) !== String(task.id)) });
+  
+  const handleRestoreTask = (task) => {
+    updateWorkspace({ 
+      archive: archive.filter(t => String(t.id) !== String(task.id)),
+      tasks: [{ ...task, status: 'todo' }, ...tasks]
+    });
+  };
+
+  const handleDelete = (task) => {
+    if (task.status === 'done') {
+      updateWorkspace({ archive: archive.filter(t => String(t.id) !== String(task.id)) });
+    } else {
+      updateWorkspace({ tasks: tasks.filter(t => String(t.id) !== String(task.id)) });
+    }
+  };
+
   const handleScoreChange = (id, newScore) => updateWorkspace({ kpis: kpis.map(k => String(k.id) === String(id) ? { ...k, score: Number(newScore) } : k) });
 
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
@@ -444,7 +511,7 @@ const handleRunAIAgent = async () => {
   const textMain = isDark ? 'text-white' : 'text-slate-900';
   const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
   const inputBg = isDark ? 'bg-[#0E1116] border border-white/10 text-white focus:border-indigo-500' : 'bg-white border border-slate-200 text-slate-900 focus:border-indigo-500';
-  const btnPrimary = isDark ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-900 text-white hover:bg-slate-800'; // Строгий цвет кнопок
+  const btnPrimary = isDark ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-900 text-white hover:bg-slate-800'; 
 
   if (!user || !docData || !currentAssistantId) return (
     <div className={`min-h-screen flex items-center justify-center p-4 font-sans ${themeBg}`}>
@@ -457,6 +524,7 @@ const handleRunAIAgent = async () => {
             {isLogin ? 'Войти' : 'Создать аккаунт'}
           </button>
         </form>
+        
         <button type="button" onClick={signInWithGoogle} className={`w-full font-bold py-4 mt-4 rounded-2xl transition-transform active:scale-95 shadow-lg border-2 ${isDark ? 'bg-[#0E1116] border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}>
           Войти через Google
         </button>
@@ -481,9 +549,9 @@ const handleRunAIAgent = async () => {
   // SVG иконки для бокового меню
   const svgBoard = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="14" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>;
   const svgAssistant = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>;
-  const svgProjects = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>;
   const svgAnalytics = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M18 9l-5 5-4-4-4 4"/></svg>;
   const svgTeam = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>;
+  const svgArchive = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>;
 
   return (
     <div className={`min-h-screen font-sans pb-32 md:pb-8 md:pl-64 transition-colors duration-300 ${themeBg}`}>
@@ -504,9 +572,12 @@ const handleRunAIAgent = async () => {
           </div>
           <NavigationItem id="matrix" iconSvg={svgBoard} label={t('board')} />
           <NavigationItem id="processes" iconSvg={svgAssistant} label={t('aiProcesses')} />
-          <NavigationItem id="projects" iconSvg={svgProjects} label={t('projects')} />
           <NavigationItem id="kpi" iconSvg={svgAnalytics} label={t('analytics')} />
-          <NavigationItem id="team" iconSvg={svgTeam} label={t('team')} />
+          
+          {/* ПОКАЗЫВАЕМ КОМАНДУ ТОЛЬКО ЕСЛИ НЕ СОЛО РЕЖИМ */}
+          {isTeamMode && <NavigationItem id="team" iconSvg={svgTeam} label={t('team')} />}
+          
+          <NavigationItem id="archive" iconSvg={svgArchive} label={t('archiveTab')} />
           
           <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors mt-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -559,13 +630,23 @@ const handleRunAIAgent = async () => {
           <div className={`w-full rounded-t-[32px] p-6 pb-32 space-y-2 ${cardBg}`} onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6"></div>
             <h3 className={`font-bold text-lg mb-4 px-2 tracking-tight ${textMain}`}>Меню</h3>
+            
+            <button onClick={() => {setActiveTab('archive'); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
+              {svgArchive} Архив задач
+            </button>
+            
+            {/* ПОКАЗЫВАЕМ КОМАНДУ ТОЛЬКО ЕСЛИ НЕ СОЛО РЕЖИМ */}
+            {isTeamMode && (
+              <button onClick={() => {setActiveTab('team'); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
+                {svgTeam} Команда и Доступы
+              </button>
+            )}
+
             <button onClick={() => {setShowOnboarding(true); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
               <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
               Настройки базы
             </button>
-            <button onClick={() => {setActiveTab('team'); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
-              {svgTeam} Команда и Доступы
-            </button>
+            
             <button onClick={() => signOut(auth)} className="w-full flex items-center gap-4 p-4 rounded-2xl mt-4 text-red-500 font-bold">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
               Выйти из аккаунта
@@ -582,16 +663,45 @@ const handleRunAIAgent = async () => {
           </div>
           <div className="hidden md:block"><h2 className={`text-2xl font-black tracking-tight ${textMain}`}>Рабочее пространство</h2></div>
           <div className="flex items-center gap-4 ml-auto">
-            {role === 'manager' && (
+            
+            {/* ПОКАЗЫВАЕМ ПЕРЕКЛЮЧАТЕЛЬ ТОЛЬКО ЕСЛИ НЕ СОЛО РЕЖИМ */}
+            {isTeamMode && role === 'manager' && (
               <div className={`flex items-center rounded-xl p-1 border ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200'}`}>
                 <select value={currentAssistantId} onChange={(e) => setCurrentAssistantId(e.target.value)} className={`pl-3 pr-8 py-1.5 bg-transparent font-semibold text-sm outline-none cursor-pointer ${textMain}`}>
                   {assistants.map(a => <option key={String(a.id)} value={String(a.id)} className={isDark ? 'text-slate-900' : ''}>{a.id === 'manager' ? `👑 Вы` : a.name}</option>)}
                 </select>
               </div>
             )}
+
             <button onClick={() => setIsDark(!isDark)} className="text-2xl">{isDark ? '☀️' : '🌙'}</button>
           </div>
         </header>
+
+        {/* 🗄 ВКЛАДКА АРХИВ */}
+        {activeTab === 'archive' && (
+          <div className="space-y-6 animate-in fade-in max-w-5xl mx-auto">
+            <div className="flex flex-col items-center justify-center text-center mb-8">
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                {svgArchive}
+              </div>
+              <h2 className={`text-3xl font-black tracking-tight mb-3 ${textMain}`}>Архив задач</h2>
+              <p className={`text-sm ${textMuted}`}>Здесь хранятся все успешно выполненные задачи.</p>
+            </div>
+            
+            {archive.length === 0 ? (
+              <div className={`text-center py-16 rounded-[32px] border border-dashed ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
+                <div className="text-4xl mb-4 opacity-50">📂</div>
+                <p className="font-medium">В архиве пока ничего нет.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {archive.map(task => (
+                  <TaskCard key={task.id} task={task} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} onRestore={handleRestoreTask} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {activeTab === 'matrix' && (
           <div className="space-y-6 animate-in fade-in">
@@ -607,15 +717,15 @@ const handleRunAIAgent = async () => {
 
             {viewMode === 'pipeline' ? (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onShowOnboarding={() => setShowOnboarding(true)} />
-                <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} />
-                <TaskColumn title={t('colReview')} colorClass="bg-amber-500" tasks={reviewTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} />
-                <TaskColumn title={t('colDeferred')} colorClass="bg-slate-600" tasks={deferredTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} />
+                <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} onShowOnboarding={() => setShowOnboarding(true)} />
+                <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} />
+                <TaskColumn title={t('colReview')} colorClass="bg-amber-500" tasks={reviewTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} />
+                <TaskColumn title={t('colDeferred')} colorClass="bg-slate-600" tasks={deferredTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} />
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <TaskColumn title={t('critical')} colorClass="bg-red-500" tasks={activeTasks.filter(t => t.urgent && t.important)} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} />
-                <TaskColumn title={t('strategy')} colorClass="bg-blue-500" tasks={activeTasks.filter(t => !t.urgent && t.important)} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} />
+                <TaskColumn title={t('critical')} colorClass="bg-red-500" tasks={activeTasks.filter(t => t.urgent && t.important)} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} />
+                <TaskColumn title={t('strategy')} colorClass="bg-blue-500" tasks={activeTasks.filter(t => !t.urgent && t.important)} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} />
               </div>
             )}
           </div>
@@ -709,7 +819,7 @@ const handleRunAIAgent = async () => {
         )}
 
         {/* 🚀 ПУЛЬТ УПРАВЛЕНИЯ КОМАНДОЙ */}
-        {activeTab === 'team' && (
+        {activeTab === 'team' && isTeamMode && (
           <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
               <h2 className={`text-2xl font-black tracking-tight flex items-center gap-3 ${textMain}`}>
@@ -742,24 +852,16 @@ const handleRunAIAgent = async () => {
             ))}
           </div>
         )}
-
-        {activeTab === 'projects' && (
-          <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in">
-            <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>
-              {svgProjects}
-            </div>
-            <h2 className={`text-3xl font-black mb-4 tracking-tight ${textMain}`}>Проекты и Папки</h2>
-            <p className={`text-sm max-w-md leading-relaxed ${textMuted}`}>Здесь вы сможете объединять задачи в крупные проекты.</p>
-            <button onClick={() => setActiveTab('matrix')} className={`mt-8 px-8 py-4 font-bold rounded-2xl active:scale-95 transition-transform ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Вернуться к задачам</button>
-          </div>
-        )}
       </div>
 
-      {/* --- ШТОРКА СОЗДАНИЯ ЗАДАЧИ --- */}
+      {/* --- ШТОРКА СОЗДАНИЯ И РЕДАКТИРОВАНИЯ ЗАДАЧИ --- */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex justify-center items-end md:justify-end md:items-stretch bg-black/40 backdrop-blur-sm p-0 animate-in fade-in">
           <div className={`w-full md:w-[450px] md:h-full md:rounded-none md:rounded-l-[32px] rounded-t-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto transition-transform ${isDark ? 'bg-[#161B22] border-l border-white/10' : 'bg-white border-l border-slate-200'}`}>
-            <div className="flex justify-between items-center mb-6"><h2 className={`text-xl font-bold ${textMain}`}>Новая задача</h2><button onClick={() => setIsCreateOpen(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className={`text-xl font-bold ${textMain}`}>{editingTaskId ? 'Редактировать задачу' : 'Новая задача'}</h2>
+              <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+            </div>
             <form onSubmit={handleAddTask} className="space-y-5">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Суть задачи</label>
@@ -778,7 +880,9 @@ const handleRunAIAgent = async () => {
                 <button type="button" onClick={() => setNewUrgent(!newUrgent)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all border-2 ${newUrgent ? 'bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20' : (isDark ? 'bg-transparent border-white/10 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300')}`}>🔥 Срочно</button>
                 <button type="button" onClick={() => setNewImportant(!newImportant)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all border-2 ${newImportant ? 'bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-500/20' : (isDark ? 'bg-transparent border-white/10 text-slate-400' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300')}`}>💎 Важно</button>
               </div>
-              <button type="submit" className={`w-full mt-2 py-4 font-bold rounded-2xl transition-transform active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 text-white hover:bg-indigo-600 shadow-indigo-500/20' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>Создать задачу ↵</button>
+              <button type="submit" className={`w-full mt-2 py-4 font-bold rounded-2xl transition-transform active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 text-white hover:bg-indigo-600 shadow-indigo-500/20' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>
+                {editingTaskId ? 'Сохранить изменения ↵' : 'Создать задачу ↵'}
+              </button>
             </form>
           </div>
         </div>
@@ -813,7 +917,7 @@ const handleRunAIAgent = async () => {
       )}
 
       {/* ОНБОРДИНГ И СЛАЙДЕРЫ */}
-      {showOnboarding && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowOnboarding(false)}><div className={`w-full max-w-lg p-8 md:p-10 rounded-[32px] border transition-all ${isDark ? 'bg-[#1C2128] border-white/10 shadow-2xl' : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.08)]'}`} onClick={e => e.stopPropagation()}><div className="w-16 h-16 mb-6 rounded-2xl bg-indigo-50 dark:bg-white/5 flex items-center justify-center text-indigo-600 dark:text-white text-3xl"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><h2 className={`text-3xl font-bold tracking-tight mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>Настройка базы</h2><div className="mb-6"><label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Ваша ниша</label><div className="flex flex-wrap gap-2">{niches.map(niche => (<button key={niche} onClick={() => setOnboardNiche(niche)} className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${onboardNiche === niche ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : (isDark ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-600 hover:border-slate-300')}`}>{niche}</button>))}</div></div><div className="mb-10"><label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Размер команды</label><div className="flex flex-wrap gap-2">{teams.map(team => (<button key={team} onClick={() => setOnboardTeam(team)} className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${onboardTeam === team ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : (isDark ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-600 hover:border-slate-300')}`}>{team}</button>))}</div></div><div className="flex gap-3"><button onClick={() => setShowOnboarding(false)} className={`px-6 py-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Пропустить</button><button onClick={handleStartTutorial} className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Сохранить</button></div></div></div>)}
+      {showOnboarding && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowOnboarding(false)}><div className={`w-full max-w-lg p-8 md:p-10 rounded-[32px] border transition-all ${isDark ? 'bg-[#1C2128] border-white/10 shadow-2xl' : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.08)]'}`} onClick={e => e.stopPropagation()}><div className="w-16 h-16 mb-6 rounded-2xl bg-indigo-50 dark:bg-white/5 flex items-center justify-center text-indigo-600 dark:text-white text-3xl"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><h2 className={`text-3xl font-bold tracking-tight mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>Настройка базы</h2><div className="mb-6"><label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Ваша ниша</label><div className="flex flex-wrap gap-2">{niches.map(niche => (<button key={niche} onClick={() => setOnboardNiche(niche)} className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${onboardNiche === niche ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : (isDark ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-600 hover:border-slate-300')}`}>{niche}</button>))}</div></div><div className="mb-10"><label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Размер команды</label><div className="flex flex-wrap gap-2">{teams.map(team => (<button key={team} onClick={() => setOnboardTeam(team)} className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${onboardTeam === team ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : (isDark ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-600 hover:border-slate-300')}`}>{team}</button>))}</div></div><div className="flex gap-3"><button onClick={() => setShowOnboarding(false)} className={`px-6 py-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Пропустить</button><button onClick={handleSaveSettings} className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Сохранить</button></div></div></div>)}
       {showTutorial && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in zoom-in-95" onClick={() => setShowTutorial(false)}><div className={`w-full max-w-lg p-8 md:p-10 rounded-[32px] border transition-all text-center ${isDark ? 'bg-[#1C2128] border-white/10 shadow-2xl' : 'bg-white border-slate-100 shadow-[0_20px_50px_rgb(0,0,0,0.15)]'}`} onClick={e => e.stopPropagation()}>{tutorialStep === 1 && (<div className="animate-in fade-in slide-in-from-right-4"><div className={`w-20 h-20 mx-auto mb-6 rounded-[24px] flex items-center justify-center text-4xl shadow-sm ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>{svgBoard}</div><h2 className={`text-2xl font-black tracking-tight mb-4 ${textMain}`}>Управление задачами</h2><p className={`text-base leading-relaxed mb-10 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Создавайте карточки, а система сама разобьет их на чек-листы.</p></div>)}{tutorialStep === 2 && (<div className="animate-in fade-in slide-in-from-right-4"><div className={`w-20 h-20 mx-auto mb-6 rounded-[24px] flex items-center justify-center text-4xl shadow-sm ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>{svgAssistant}</div><h2 className={`text-2xl font-black tracking-tight mb-4 ${textMain}`}>Ваш Ассистент</h2><p className={`text-base leading-relaxed mb-10 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Делегируйте создание текстов и анализ данных профильным экспертам во вкладке Ассистент.</p></div>)}{tutorialStep === 3 && (<div className="animate-in fade-in slide-in-from-right-4"><div className={`w-20 h-20 mx-auto mb-6 rounded-[24px] flex items-center justify-center text-4xl shadow-sm ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>{svgAnalytics}</div><h2 className={`text-2xl font-black tracking-tight mb-4 ${textMain}`}>Сводка по команде</h2><p className={`text-base leading-relaxed mb-10 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Следите за ключевыми метриками (SLA) и получайте автоматические советы по управлению.</p></div>)}<div className="flex justify-center gap-2 mb-8"><span className={`w-2.5 h-2.5 rounded-full transition-colors ${tutorialStep === 1 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-white/20'}`}></span><span className={`w-2.5 h-2.5 rounded-full transition-colors ${tutorialStep === 2 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-white/20'}`}></span><span className={`w-2.5 h-2.5 rounded-full transition-colors ${tutorialStep === 3 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-white/20'}`}></span></div><div className="flex gap-3">{tutorialStep < 3 ? (<><button onClick={() => setShowTutorial(false)} className={`px-6 py-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Пропустить</button><button onClick={() => setTutorialStep(prev => prev + 1)} className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Далее</button></>) : (<button onClick={() => setShowTutorial(false)} className={`w-full py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Начать работу</button>)}</div></div></div>)}
     </div>
   );
