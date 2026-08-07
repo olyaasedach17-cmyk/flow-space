@@ -137,12 +137,10 @@ export default function App() {
   const [isTaskGenerating, setIsTaskGenerating] = useState(false);
   const [isListening, setIsListening] = useState(false);
 
-  // Состояния для Пульта управления
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('worker');
 
-  // Состояния ИИ-Агента
   const [isAgentRunning, setIsAgentRunning] = useState(false);
 
   const [processRole, setProcessRole] = useState('copywriter');
@@ -183,15 +181,12 @@ export default function App() {
         setRole('manager'); 
         setDocData(data);
         if (!currentAssistantId) setCurrentAssistantId('manager');
-        
-        // Подтягиваем настройки, если они уже сохранены
         if (data.settings?.teamSize) setOnboardTeam(data.settings.teamSize);
         if (data.settings?.niche) setOnboardNiche(data.settings.niche);
-
       } else {
         setDoc(docRef, { 
           email: user.email.toLowerCase(), 
-          settings: { isTeamMode: true }, // По умолчанию командный режим включен
+          settings: { isTeamMode: true }, 
           assistants: [{ id: 'manager', name: '👑' }], 
           workspaces: { 'manager': { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } } 
         });
@@ -243,7 +238,7 @@ export default function App() {
   const kpis = currentWorkspace.kpis || defaultKpis;
   const savedTime = currentWorkspace.savedTime || 0;
   const assistants = docData?.assistants || [];
-  const isTeamMode = docData?.settings?.isTeamMode ?? true; // 👤 РЕЖИМ СОЛО ИЛИ КОМАНДА
+  const isTeamMode = docData?.settings?.isTeamMode ?? true; 
   
   const totalEfficiency = kpis.reduce((sum, kpi) => sum + ((kpi.score / kpi.max) * kpi.weight), 0).toFixed(1);
   const totalPendingHours = tasks.filter(t => t.status !== 'done').reduce((acc, task) => acc + (parseFloat(task.estimatedHours) || 0), 0);
@@ -257,11 +252,14 @@ export default function App() {
 
   const updateWorkspace = (newData) => setDoc(doc(db, 'users', user.uid), { workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } } }, { merge: true });
 
-  // 🔐 БЕЗОПАСНЫЙ КЛЮЧ
- const apiKey = String(process.env.REACT_APP_OPENAI_API_KEY).trim();
+  // ==========================================
+  // 🔐 БЕЗОПАСНЫЙ КЛЮЧ: СУПЕР-БРОНЯ ОТ ПРОБЕЛОВ
+  // ==========================================
+  const rawKey = process.env.REACT_APP_OPENAI_API_KEY || '';
+  const apiKey = String(rawKey).replace(/[^a-zA-Z0-9\-_]/g, '');
 
   const handleRunAIAgent = async () => {
-    if (!apiKey) return alert('Ключ API не найден в настройках Vercel!');
+    if (!apiKey) return alert('Ключ API не найден. Проверьте настройки Vercel Environment Variables!');
     
     const tasksToProcess = tasks.filter(t => t.status === 'todo' && (!t.description || parseFloat(t.estimatedHours) === 0));
     if (tasksToProcess.length === 0) {
@@ -335,6 +333,8 @@ export default function App() {
           });
           alert(`Агент успешно расписал задачу и оставил её у вас!`);
         }
+      } else if (data.error) {
+        alert('Ошибка от сервера ИИ: ' + data.error.message);
       }
     } catch (error) { 
       alert('Ошибка агента: ' + error.message); 
@@ -357,7 +357,7 @@ export default function App() {
   };
   
   const handleGenerateTeamReport = async () => {
-    if (!apiKey) return alert('Ключ API не найден!');
+    if (!apiKey) return alert('Ключ API не настроен!');
     setIsGeneratingReport(true);
     try {
       const systemPrompt = `Ты — операционный директор (COO). Проанализируй данные:
@@ -383,7 +383,7 @@ export default function App() {
 
   const handleTaskAI = async (mode) => {
     if (!newTaskTitle.trim()) return alert('Сначала напишите короткую суть задачи!');
-    if (!apiKey) return alert('Вставьте ключ!');
+    if (!apiKey) return alert('Ключ API не найден! Убедитесь, что добавили его в Vercel.');
     setIsTaskGenerating(true);
     
     try {
@@ -398,8 +398,8 @@ export default function App() {
       
       if (data.choices) {
         setNewTaskDesc(data.choices[0].message.content.trim());
-      } else {
-        alert('Ответ от сервера ИИ: ' + JSON.stringify(data)); 
+      } else if (data.error) {
+        alert('Ошибка от сервера ИИ: ' + data.error.message); 
       }
     } catch (error) { 
       alert('Ошибка сети: ' + error.message); 
@@ -410,7 +410,7 @@ export default function App() {
 
   const handleGenerateProcess = async () => {
     if (!processTopic.trim()) return alert('Опишите, что вам нужно сгенерировать.');
-    if (!apiKey) return alert('Ключ API не найден!');
+    if (!apiKey) return alert('Ключ API не настроен!');
     setIsProcessGenerating(true);
     try {
       let systemPrompt = '';
@@ -428,20 +428,13 @@ export default function App() {
     } catch (error) {} finally { setIsProcessGenerating(false); }
   };
 
-  // 👤 СОХРАНЕНИЕ НАСТРОЕК (Режим Соло или Команда)
   const handleSaveSettings = async () => {
     if (!onboardNiche || !onboardTeam) return alert('Выберите нишу и команду!');
-    
-    // Если выбрано "Я один", выключаем командный режим
     const mode = onboardTeam !== '👤 Я один';
-    
     await setDoc(doc(db, 'users', user.uid), { 
       settings: { isTeamMode: mode, niche: onboardNiche, teamSize: onboardTeam } 
     }, { merge: true });
-    
     setShowOnboarding(false);
-    
-    // Если еще не показывали туториал, показываем
     if (!docData?.settings) {
       setTutorialStep(1); 
       setShowTutorial(true);
@@ -518,8 +511,8 @@ export default function App() {
       <div className={`p-8 rounded-[32px] max-w-md w-full ${cardBg}`}>
         <h1 className={`text-2xl font-black text-center mb-8 tracking-tight ${textMain}`}>Flow Space</h1>
         <form onSubmit={handleAuth} className="space-y-4">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className={`w-full px-4 py-4 rounded-2xl outline-none transition-colors border-2 ${inputBg}`} />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required className={`w-full px-4 py-4 rounded-2xl outline-none transition-colors border-2 ${inputBg}`} />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required autoComplete="username" className={`w-full px-4 py-4 rounded-2xl outline-none transition-colors border-2 ${inputBg}`} />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required autoComplete="current-password" className={`w-full px-4 py-4 rounded-2xl outline-none transition-colors border-2 ${inputBg}`} />
           <button type="submit" className={`w-full font-bold py-4 rounded-2xl transition-transform active:scale-95 shadow-lg ${btnPrimary}`}>
             {isLogin ? 'Войти' : 'Создать аккаунт'}
           </button>
@@ -546,7 +539,6 @@ export default function App() {
     </button>
   );
 
-  // SVG иконки для бокового меню
   const svgBoard = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="14" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>;
   const svgAssistant = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>;
   const svgAnalytics = <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M18 9l-5 5-4-4-4 4"/></svg>;
@@ -556,10 +548,7 @@ export default function App() {
   return (
     <div className={`min-h-screen font-sans pb-32 md:pb-8 md:pl-64 transition-colors duration-300 ${themeBg}`}>
       
-      {/* --- ПРЕМИАЛЬНОЕ МЕНЮ НАВИГАЦИИ (Sidebar for Desktop, Pill for Mobile) --- */}
       <nav className={`fixed z-40 md:bottom-auto md:top-0 md:left-0 md:w-64 md:h-screen md:border-r md:flex md:flex-col md:justify-start md:py-6 md:px-4 md:gap-2 ${isDark ? 'md:bg-[#0E1116] md:border-white/10' : 'md:bg-[#F8FAFC] md:border-slate-200'}`}>
-        
-        {/* === ДЕСКТОПНАЯ ВЕРСИЯ === */}
         <div className="hidden md:flex flex-col w-full h-full">
           <div className="flex items-center gap-3 mb-8 px-2 w-full">
              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-md ${isDark ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}`}><span className="font-black text-sm">FS</span></div>
@@ -574,7 +563,6 @@ export default function App() {
           <NavigationItem id="processes" iconSvg={svgAssistant} label={t('aiProcesses')} />
           <NavigationItem id="kpi" iconSvg={svgAnalytics} label={t('analytics')} />
           
-          {/* ПОКАЗЫВАЕМ КОМАНДУ ТОЛЬКО ЕСЛИ НЕ СОЛО РЕЖИМ */}
           {isTeamMode && <NavigationItem id="team" iconSvg={svgTeam} label={t('team')} />}
           
           <NavigationItem id="archive" iconSvg={svgArchive} label={t('archiveTab')} />
@@ -593,60 +581,47 @@ export default function App() {
         </div>
       </nav>
 
-      {/* === МОБИЛЬНАЯ ВЕРСИЯ (PREMIUM FLOATING PILL) === */}
       <div className="md:hidden fixed bottom-6 left-4 right-4 z-50">
         <div className={`flex justify-between items-center px-6 py-4 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.12)] backdrop-blur-xl border ${isDark ? 'bg-[#1C2128]/85 border-white/10' : 'bg-white/90 border-slate-200'}`}>
-          
           <button onClick={() => { setActiveTab('matrix'); setIsMoreMenuOpen(false); }} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'matrix' ? (isDark ? 'text-white' : 'text-slate-900') : 'text-slate-400 hover:text-slate-500'}`}>
             {svgBoard}
             <span className="text-[9px] font-bold tracking-wide">Задачи</span>
           </button>
-          
           <button onClick={() => { setActiveTab('processes'); setIsMoreMenuOpen(false); }} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'processes' ? (isDark ? 'text-white' : 'text-slate-900') : 'text-slate-400 hover:text-slate-500'}`}>
             {svgAssistant}
             <span className="text-[9px] font-bold tracking-wide">Ассистент</span>
           </button>
-
           <button onClick={() => setIsCreateOpen(true)} className={`w-12 h-12 rounded-full flex items-center justify-center text-white shadow-xl transition-transform active:scale-90 ${isDark ? 'bg-indigo-500 shadow-indigo-500/20' : 'bg-slate-900 shadow-slate-900/20'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
           </button>
-
           <button onClick={() => { setActiveTab('kpi'); setIsMoreMenuOpen(false); }} className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === 'kpi' ? (isDark ? 'text-white' : 'text-slate-900') : 'text-slate-400 hover:text-slate-500'}`}>
             {svgAnalytics}
             <span className="text-[9px] font-bold tracking-wide">Сводка</span>
           </button>
-          
           <button onClick={() => setIsMoreMenuOpen(true)} className={`flex flex-col items-center gap-1.5 text-slate-400 hover:text-slate-500`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
             <span className="text-[9px] font-bold tracking-wide">Ещё</span>
           </button>
-
         </div>
       </div>
 
-      {/* МОБИЛЬНОЕ МЕНЮ ЕЩЕ */}
       {isMoreMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end animate-in fade-in" onClick={() => setIsMoreMenuOpen(false)}>
           <div className={`w-full rounded-t-[32px] p-6 pb-32 space-y-2 ${cardBg}`} onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6"></div>
             <h3 className={`font-bold text-lg mb-4 px-2 tracking-tight ${textMain}`}>Меню</h3>
-            
             <button onClick={() => {setActiveTab('archive'); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
               {svgArchive} Архив задач
             </button>
-            
-            {/* ПОКАЗЫВАЕМ КОМАНДУ ТОЛЬКО ЕСЛИ НЕ СОЛО РЕЖИМ */}
             {isTeamMode && (
               <button onClick={() => {setActiveTab('team'); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
                 {svgTeam} Команда и Доступы
               </button>
             )}
-
             <button onClick={() => {setShowOnboarding(true); setIsMoreMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/5 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
               <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
               Настройки базы
             </button>
-            
             <button onClick={() => signOut(auth)} className="w-full flex items-center gap-4 p-4 rounded-2xl mt-4 text-red-500 font-bold">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
               Выйти из аккаунта
@@ -655,7 +630,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-8">
         <header className="flex justify-between items-center mt-2 mb-6">
           <div className="flex items-center gap-3 md:hidden">
@@ -663,8 +637,6 @@ export default function App() {
           </div>
           <div className="hidden md:block"><h2 className={`text-2xl font-black tracking-tight ${textMain}`}>Рабочее пространство</h2></div>
           <div className="flex items-center gap-4 ml-auto">
-            
-            {/* ПОКАЗЫВАЕМ ПЕРЕКЛЮЧАТЕЛЬ ТОЛЬКО ЕСЛИ НЕ СОЛО РЕЖИМ */}
             {isTeamMode && role === 'manager' && (
               <div className={`flex items-center rounded-xl p-1 border ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200'}`}>
                 <select value={currentAssistantId} onChange={(e) => setCurrentAssistantId(e.target.value)} className={`pl-3 pr-8 py-1.5 bg-transparent font-semibold text-sm outline-none cursor-pointer ${textMain}`}>
@@ -672,12 +644,10 @@ export default function App() {
                 </select>
               </div>
             )}
-
             <button onClick={() => setIsDark(!isDark)} className="text-2xl">{isDark ? '☀️' : '🌙'}</button>
           </div>
         </header>
 
-        {/* 🗄 ВКЛАДКА АРХИВ */}
         {activeTab === 'archive' && (
           <div className="space-y-6 animate-in fade-in max-w-5xl mx-auto">
             <div className="flex flex-col items-center justify-center text-center mb-8">
@@ -687,7 +657,6 @@ export default function App() {
               <h2 className={`text-3xl font-black tracking-tight mb-3 ${textMain}`}>Архив задач</h2>
               <p className={`text-sm ${textMuted}`}>Здесь хранятся все успешно выполненные задачи.</p>
             </div>
-            
             {archive.length === 0 ? (
               <div className={`text-center py-16 rounded-[32px] border border-dashed ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
                 <div className="text-4xl mb-4 opacity-50">📂</div>
@@ -714,7 +683,6 @@ export default function App() {
                 {isAgentRunning ? 'Агент работает...' : 'Запустить Агента'}
               </button>
             </div>
-
             {viewMode === 'pipeline' ? (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} role={role} isDark={isDark} t={t} onMove={handleMoveTask} onDelete={handleDelete} onEdit={handleOpenEdit} onShowOnboarding={() => setShowOnboarding(true)} />
@@ -772,7 +740,6 @@ export default function App() {
               <h2 className={`text-3xl font-black tracking-tight mb-3 ${textMain}`}>Аналитика и SLA</h2>
               <p className={`text-sm ${textMuted}`}>Контролируйте эффективность работы команды в реальном времени.</p>
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className={`p-8 rounded-[32px] shadow-sm border relative overflow-hidden flex flex-col justify-between ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200'}`}>
                 <div className="flex justify-between items-start mb-6"><p className={`text-xs font-bold uppercase tracking-widest ${textMuted}`}>{t('slaIndex')}</p></div>
@@ -783,7 +750,6 @@ export default function App() {
                 <div><h2 className={`text-4xl md:text-5xl font-bold tracking-tight ${textMain}`}>{savedTime.toFixed(1)} <span className="text-xl md:text-2xl font-medium text-slate-400">ч.</span></h2></div>
               </div>
             </div>
-
             <div className={`p-6 md:p-8 rounded-[32px] border shadow-sm ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <div>
@@ -800,7 +766,6 @@ export default function App() {
                 </div>
               )}
             </div>
-            
             <div className="grid grid-cols-1 gap-6">
               {kpis.map((kpi) => (
                 <div key={kpi.id} className={`p-6 md:p-8 rounded-[32px] border flex flex-col md:flex-row gap-6 md:items-center justify-between ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}>
@@ -818,7 +783,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 🚀 ПУЛЬТ УПРАВЛЕНИЯ КОМАНДОЙ */}
         {activeTab === 'team' && isTeamMode && (
           <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
@@ -830,7 +794,6 @@ export default function App() {
                 + Пригласить коллегу
               </button>
             </div>
-            
             {assistants.map(ast => (
               <div key={ast.id} className={`p-6 rounded-[24px] border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 ${isDark ? 'bg-[#161B22] border-white/5' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-center gap-4">
@@ -854,7 +817,6 @@ export default function App() {
         )}
       </div>
 
-      {/* --- ШТОРКА СОЗДАНИЯ И РЕДАКТИРОВАНИЯ ЗАДАЧИ --- */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex justify-center items-end md:justify-end md:items-stretch bg-black/40 backdrop-blur-sm p-0 animate-in fade-in">
           <div className={`w-full md:w-[450px] md:h-full md:rounded-none md:rounded-l-[32px] rounded-t-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto transition-transform ${isDark ? 'bg-[#161B22] border-l border-white/10' : 'bg-white border-l border-slate-200'}`}>
@@ -888,7 +850,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- МОДАЛКА ПРИГЛАШЕНИЯ СОТРУДНИКА --- */}
       {isInviteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in" onClick={() => setIsInviteOpen(false)}>
           <div className={`w-full max-w-sm p-8 rounded-[32px] border shadow-2xl ${isDark ? 'bg-[#1C2128] border-white/10' : 'bg-white border-slate-100'}`} onClick={e => e.stopPropagation()}>
@@ -916,7 +877,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ОНБОРДИНГ И СЛАЙДЕРЫ */}
       {showOnboarding && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in" onClick={() => setShowOnboarding(false)}><div className={`w-full max-w-lg p-8 md:p-10 rounded-[32px] border transition-all ${isDark ? 'bg-[#1C2128] border-white/10 shadow-2xl' : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.08)]'}`} onClick={e => e.stopPropagation()}><div className="w-16 h-16 mb-6 rounded-2xl bg-indigo-50 dark:bg-white/5 flex items-center justify-center text-indigo-600 dark:text-white text-3xl"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div><h2 className={`text-3xl font-bold tracking-tight mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>Настройка базы</h2><div className="mb-6"><label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Ваша ниша</label><div className="flex flex-wrap gap-2">{niches.map(niche => (<button key={niche} onClick={() => setOnboardNiche(niche)} className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${onboardNiche === niche ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : (isDark ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-600 hover:border-slate-300')}`}>{niche}</button>))}</div></div><div className="mb-10"><label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Размер команды</label><div className="flex flex-wrap gap-2">{teams.map(team => (<button key={team} onClick={() => setOnboardTeam(team)} className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors ${onboardTeam === team ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : (isDark ? 'border-white/10 text-slate-400' : 'border-slate-100 text-slate-600 hover:border-slate-300')}`}>{team}</button>))}</div></div><div className="flex gap-3"><button onClick={() => setShowOnboarding(false)} className={`px-6 py-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Пропустить</button><button onClick={handleSaveSettings} className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Сохранить</button></div></div></div>)}
       {showTutorial && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in zoom-in-95" onClick={() => setShowTutorial(false)}><div className={`w-full max-w-lg p-8 md:p-10 rounded-[32px] border transition-all text-center ${isDark ? 'bg-[#1C2128] border-white/10 shadow-2xl' : 'bg-white border-slate-100 shadow-[0_20px_50px_rgb(0,0,0,0.15)]'}`} onClick={e => e.stopPropagation()}>{tutorialStep === 1 && (<div className="animate-in fade-in slide-in-from-right-4"><div className={`w-20 h-20 mx-auto mb-6 rounded-[24px] flex items-center justify-center text-4xl shadow-sm ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>{svgBoard}</div><h2 className={`text-2xl font-black tracking-tight mb-4 ${textMain}`}>Управление задачами</h2><p className={`text-base leading-relaxed mb-10 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Создавайте карточки, а система сама разобьет их на чек-листы.</p></div>)}{tutorialStep === 2 && (<div className="animate-in fade-in slide-in-from-right-4"><div className={`w-20 h-20 mx-auto mb-6 rounded-[24px] flex items-center justify-center text-4xl shadow-sm ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>{svgAssistant}</div><h2 className={`text-2xl font-black tracking-tight mb-4 ${textMain}`}>Ваш Ассистент</h2><p className={`text-base leading-relaxed mb-10 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Делегируйте создание текстов и анализ данных профильным экспертам во вкладке Ассистент.</p></div>)}{tutorialStep === 3 && (<div className="animate-in fade-in slide-in-from-right-4"><div className={`w-20 h-20 mx-auto mb-6 rounded-[24px] flex items-center justify-center text-4xl shadow-sm ${isDark ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'}`}>{svgAnalytics}</div><h2 className={`text-2xl font-black tracking-tight mb-4 ${textMain}`}>Сводка по команде</h2><p className={`text-base leading-relaxed mb-10 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Следите за ключевыми метриками (SLA) и получайте автоматические советы по управлению.</p></div>)}<div className="flex justify-center gap-2 mb-8"><span className={`w-2.5 h-2.5 rounded-full transition-colors ${tutorialStep === 1 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-white/20'}`}></span><span className={`w-2.5 h-2.5 rounded-full transition-colors ${tutorialStep === 2 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-white/20'}`}></span><span className={`w-2.5 h-2.5 rounded-full transition-colors ${tutorialStep === 3 ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-white/20'}`}></span></div><div className="flex gap-3">{tutorialStep < 3 ? (<><button onClick={() => setShowTutorial(false)} className={`px-6 py-4 rounded-2xl font-bold transition-colors ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Пропустить</button><button onClick={() => setTutorialStep(prev => prev + 1)} className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Далее</button></>) : (<button onClick={() => setShowTutorial(false)} className={`w-full py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>Начать работу</button>)}</div></div></div>)}
     </div>
