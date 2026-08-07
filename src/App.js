@@ -228,7 +228,7 @@ export default function App() {
   const updateWorkspace = (newData) => setDoc(doc(db, 'users', user.uid), { workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } } }, { merge: true });
 
   // ⚠️ СЮДА ВСТАВЛЯЙ СВОЙ НОВЫЙ КЛЮЧ ОТ PROXYAPI
-  const apiKey = "sk-PtBuea8zR4gRtdYury5w1GOX3gKIpD4m"; 
+  const apiKey = "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ"; 
 
 const handleRunAIAgent = async () => {
     if (apiKey === "ВСТАВЬ_СЮДА_СВОЙ_НОВЫЙ_КЛЮЧ") return alert('Вставьте ключ API!');
@@ -270,18 +270,53 @@ const handleRunAIAgent = async () => {
         if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiResult = JSON.parse(rawContent);
         
-        // 🧠 3. Вписываем имя исполнителя прямо в карточку задачи
-        updateWorkspace({ 
-          tasks: tasks.map(t => String(t.id) === String(targetTask.id) ? {
-            ...t, 
-            description: `👤 Исполнитель: ${aiResult.assignee || 'Вам'}\n\n${aiResult.description || t.description}`, 
-            estimatedHours: aiResult.estimatedHours || 1, 
-            urgent: aiResult.urgent, 
+        // 🧠 3. ПЕРЕКЛАДЫВАЕМ ЗАДАЧУ В НУЖНЫЙ ЯЩИК (Новая магия!)
+        const targetAssistant = assistants.find(a => a.name === aiResult.assignee);
+
+        // Если ИИ выбрал сотрудника, и это не мы сами
+        if (targetAssistant && targetAssistant.id !== currentAssistantId) {
+          
+          // 1. Вырезаем задачу из твоего текущего списка
+          const remainingTasks = tasks.filter(t => String(t.id) !== String(targetTask.id));
+          
+          // 2. Готовим готовую, расписанную карточку задачи
+          const updatedTask = {
+            ...targetTask,
+            description: `${aiResult.description || targetTask.description}`,
+            estimatedHours: aiResult.estimatedHours || 1,
+            urgent: aiResult.urgent,
             important: aiResult.important
-          } : t)
-        });
+          };
+
+          // 3. Достаем "ящик" сотрудника (например, Ани)
+          const assistantWorkspace = docData.workspaces[targetAssistant.id] || { tasks: [] };
+          const assistantTasks = assistantWorkspace.tasks || [];
+
+          // 4. Обновляем базу данных: сохраняем сразу обе папки!
+          await setDoc(doc(db, 'users', user.uid), {
+            workspaces: {
+              ...docData.workspaces,
+              [currentAssistantId]: { ...currentWorkspace, tasks: remainingTasks }, // Твоя папка худеет на 1 задачу
+              [targetAssistant.id]: { ...assistantWorkspace, tasks: [updatedTask, ...assistantTasks] } // Папка Ани толстеет на 1 задачу
+            }
+          }, { merge: true });
+
+          alert(`Агент перенес задачу в пространство сотрудника: ${aiResult.assignee}!`);
         
-        alert(`Агент успешно расписал задачу и назначил её на: ${aiResult.assignee || 'вас'}!`);
+        } else {
+          // Если ИИ никого не выбрал (или выбрал тебя), оставляем задачу в твоей папке
+          updateWorkspace({ 
+            tasks: tasks.map(t => String(t.id) === String(targetTask.id) ? {
+              ...t, 
+              description: `👤 Исполнитель: ${aiResult.assignee || 'Вам'}\n\n${aiResult.description || t.description}`, 
+              assignee: aiResult.assignee, 
+              estimatedHours: aiResult.estimatedHours || 1, 
+              urgent: aiResult.urgent, 
+              important: aiResult.important
+            } : t)
+          });
+          alert(`Агент успешно расписал задачу и оставил её у вас!`);
+        }
       }
     } catch (error) { 
       alert('Ошибка агента: ' + error.message); 
@@ -289,7 +324,6 @@ const handleRunAIAgent = async () => {
       setIsAgentRunning(false); 
     }
   };
-
   const handleInviteColleague = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
@@ -304,7 +338,7 @@ const handleRunAIAgent = async () => {
   };
   
   const handleGenerateTeamReport = async () => {
-    if (apiKey === "sk-PtBuea8zR4gRtdYury5w1GOX3gKIpD4m") return alert('sk-PtBuea8zR4gRtdYury5w1GOX3gKIpD4m');
+    if (apiKey === "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ") return alert('sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ');
     setIsGeneratingReport(true);
     try {
       const systemPrompt = `Ты — операционный директор (COO). Проанализируй данные:
@@ -330,7 +364,7 @@ const handleRunAIAgent = async () => {
 
   const handleTaskAI = async (mode) => {
     if (!newTaskTitle.trim()) return alert('Сначала напишите короткую суть задачи!');
-    if (apiKey === "ВСТАВЬ_СЮДА_СВОЙ_НОВЫЙ_КЛЮЧ") return alert('Вставьте ключ!');
+    if (apiKey === "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ") return alert('Вставьте ключ!');
     setIsTaskGenerating(true);
     
     try {
@@ -359,7 +393,7 @@ const handleRunAIAgent = async () => {
 
   const handleGenerateProcess = async () => {
     if (!processTopic.trim()) return alert('Опишите, что вам нужно сгенерировать.');
-    if (apiKey === "ВСТАВЬ_СЮДА_СВОЙ_НОВЫЙ_КЛЮЧ") return alert('Вставьте ключ!');
+    if (apiKey === "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ") return alert('Вставьте ключ!');
     setIsProcessGenerating(true);
     try {
       let systemPrompt = '';
