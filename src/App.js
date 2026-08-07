@@ -207,6 +207,13 @@ export default function App() {
       alert('Ошибка при сбросе пароля: ' + error.message);
     }
   };
+  const signInWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      alert('Ошибка входа через Google: ' + error.message);
+    }
+  };
 
   const currentWorkspace = docData?.workspaces?.[currentAssistantId] || {};
   const tasks = currentWorkspace.tasks || [];
@@ -228,7 +235,7 @@ export default function App() {
   const updateWorkspace = (newData) => setDoc(doc(db, 'users', user.uid), { workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } } }, { merge: true });
 
   // ⚠️ СЮДА ВСТАВЛЯЙ СВОЙ НОВЫЙ КЛЮЧ ОТ PROXYAPI
-  const apiKey = "sk-q3EaeCTPj0f91Ni8ThyS493Q7jTqwsdQ"; 
+  const apiKey = process.env.REACT_APP_OPENAI_API_KEY;
 
 const handleRunAIAgent = async () => {
     if (apiKey === "ВСТАВЬ_СЮДА_СВОЙ_НОВЫЙ_КЛЮЧ") return alert('Вставьте ключ API!');
@@ -450,6 +457,9 @@ const handleRunAIAgent = async () => {
             {isLogin ? 'Войти' : 'Создать аккаунт'}
           </button>
         </form>
+        <button type="button" onClick={signInWithGoogle} className={`w-full font-bold py-4 mt-4 rounded-2xl transition-transform active:scale-95 shadow-lg border-2 ${isDark ? 'bg-[#0E1116] border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}>
+          Войти через Google
+        </button>
         
         <div className="mt-8 flex flex-col items-center gap-4">
           <button type="button" onClick={() => setIsLogin(!isLogin)} className={`text-sm font-semibold hover:underline transition-colors ${textMuted}`}>
