@@ -258,7 +258,7 @@ export default function App() {
   const updateWorkspace = (newData) => setDoc(doc(db, 'users', user.uid), { workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } } }, { merge: true });
 
   // 🔐 БЕЗОПАСНЫЙ КЛЮЧ
-  const apiKey = process.env.REACT_APP_OPENAI_API_KEY; 
+ const apiKey = String(process.env.REACT_APP_OPENAI_API_KEY).trim();
 
   const handleRunAIAgent = async () => {
     if (!apiKey) return alert('Ключ API не найден в настройках Vercel!');
