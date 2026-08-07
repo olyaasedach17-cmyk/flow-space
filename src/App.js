@@ -363,10 +363,20 @@ export default function App() {
       const systemPrompt = `Ты — операционный директор (COO). Проанализируй данные:
       SLA: ${totalEfficiency}%. Бэклог: ${todoTasks.length}. В работе: ${inProgressTasks.length}. На проверке: ${reviewTasks.length}. Загрузка: ${totalPendingHours}ч.
       Напиши краткий отчет в 3 абзаца: 1. Оценка. 2. Риски. 3. Совет руководителю.`;
-      const response = await fetch('[https://api.proxyapi.ru/openai/v1/chat/completions](https://api.proxyapi.ru/openai/v1/chat/completions)', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }], temperature: 0.6 }) });
+      
+      const response = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
+        body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }], temperature: 0.6 }) 
+      });
+      
       const data = await response.json();
       if (data.choices) setTeamReport(data.choices[0].message.content.trim());
-    } catch (error) {} finally { setIsGeneratingReport(false); }
+    } catch (error) {
+      alert('Ошибка при генерации отчета: ' + error.message);
+    } finally { 
+      setIsGeneratingReport(false); 
+    }
   };
   
   const startVoiceInput = () => {
@@ -381,14 +391,15 @@ export default function App() {
     recognition.start();
   };
 
-  const handleTaskAI = async (mode) => {
+ const handleTaskAI = async (mode) => {
     if (!newTaskTitle.trim()) return alert('Сначала напишите короткую суть задачи!');
-    if (!apiKey) return alert('Ключ API не найден! Убедитесь, что добавили его в Vercel.');
+    if (!apiKey) return alert('Ключ API не найден! Убедитесь, что добавили его в окружение.');
     setIsTaskGenerating(true);
     
     try {
       let systemPrompt = mode === 'expand' ? 'Пользователь написал идею. Преврати её в структурированную задачу.' : 'Разбей задачу на пошаговый чек-лист. Используй маркдаун списки.';
-      const response = await fetch('[https://api.proxyapi.ru/openai/v1/chat/completions](https://api.proxyapi.ru/openai/v1/chat/completions)', { 
+      
+      const response = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
         body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: newTaskTitle }], temperature: 0.5 }) 
@@ -422,10 +433,20 @@ export default function App() {
         case 'sheets': systemPrompt = 'Ты эксперт по таблицам. Спроектируй структуру.'; break;
         default: systemPrompt = 'Выдай подробный ответ.';
       }
-      const response = await fetch('[https://api.proxyapi.ru/openai/v1/chat/completions](https://api.proxyapi.ru/openai/v1/chat/completions)', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: processTopic }], temperature: 0.7 }) });
+      
+      const response = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
+        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: processTopic }], temperature: 0.7 }) 
+      });
+      
       const data = await response.json();
       if (data.choices) setProcessResult(data.choices[0].message.content.trim());
-    } catch (error) {} finally { setIsProcessGenerating(false); }
+    } catch (error) {
+      alert('Ошибка при генерации процесса: ' + error.message);
+    } finally { 
+      setIsProcessGenerating(false); 
+    }
   };
 
   const handleSaveSettings = async () => {
