@@ -252,11 +252,11 @@ export default function App() {
 
   const updateWorkspace = (newData) => setDoc(doc(db, 'users', user.uid), { workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } } }, { merge: true });
 
+// ==========================================
+  // 🔐 БЕЗОПАСНЫЙ КЛЮЧ
   // ==========================================
-  // 🔐 БЕЗОПАСНЫЙ КЛЮЧ: СУПЕР-БРОНЯ ОТ ПРОБЕЛОВ
-  // ==========================================
-  const rawKey = process.env.REACT_APP_OPENAI_API_KEY || '';
-  const apiKey = String(rawKey).replace(/[^a-zA-Z0-9\-_]/g, '');
+  const rawKey = import.meta.env?.VITE_OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY || '';
+  const apiKey = rawKey.trim();
 
   const handleRunAIAgent = async () => {
     if (!apiKey) return alert('Ключ API не найден. Проверьте настройки Vercel Environment Variables!');
@@ -391,7 +391,7 @@ export default function App() {
     recognition.start();
   };
 
- const handleTaskAI = async (mode) => {
+const handleTaskAI = async (mode) => {
     if (!newTaskTitle.trim()) return alert('Сначала напишите короткую суть задачи!');
     if (!apiKey) return alert('Ключ API не найден! Убедитесь, что добавили его в окружение.');
     setIsTaskGenerating(true);
@@ -407,19 +407,22 @@ export default function App() {
       
       const data = await response.json();
       
+      // ПРОВЕРКА НА СКРЫТЫЕ ОШИБКИ:
+      if (!response.ok) {
+        throw new Error(data.error?.message || `Ошибка сервера: ${response.status}`);
+      }
+      
       if (data.choices) {
         setNewTaskDesc(data.choices[0].message.content.trim());
-      } else if (data.error) {
-        alert('Ошибка от сервера ИИ: ' + data.error.message); 
       }
     } catch (error) { 
-      alert('Ошибка сети: ' + error.message); 
+      alert('Ошибка при генерации задачи:\n' + error.message); 
     } finally { 
       setIsTaskGenerating(false); 
     }
   };
 
-  const handleGenerateProcess = async () => {
+const handleGenerateProcess = async () => {
     if (!processTopic.trim()) return alert('Опишите, что вам нужно сгенерировать.');
     if (!apiKey) return alert('Ключ API не настроен!');
     setIsProcessGenerating(true);
@@ -441,9 +444,15 @@ export default function App() {
       });
       
       const data = await response.json();
+      
+      // ВОТ ЭТА ПРОВЕРКА ПОКАЖЕТ СКРЫТЫЕ ОШИБКИ:
+      if (!response.ok) {
+        throw new Error(data.error?.message || `Ошибка сервера: ${response.status}`);
+      }
+      
       if (data.choices) setProcessResult(data.choices[0].message.content.trim());
     } catch (error) {
-      alert('Ошибка при генерации процесса: ' + error.message);
+      alert('Ошибка Ассистента:\n' + error.message);
     } finally { 
       setIsProcessGenerating(false); 
     }
