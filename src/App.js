@@ -160,6 +160,9 @@ export default function App() {
 
   const niches = ['👗 Одежда', '💅 Бьюти', '☕️ Кофейня', '💻 IT / Дизайн', '📝 Инфобизнес'];
   const teams = ['👤 Я один', '👥 2-5 человек', '🏢 Больше 5 человек'];
+  // === НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ ДОЛЖНОСТИ И ИСПОЛНИТЕЛЯ ===
+  const [invitePosition, setInvitePosition] = useState('');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('manager');
 
   useEffect(() => { 
     localStorage.setItem('flowspace_theme', isDark ? 'dark' : 'light');
@@ -258,8 +261,8 @@ export default function App() {
   const rawKey = import.meta.env?.VITE_OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY || '';
   const apiKey = rawKey.trim();
 
-  const handleRunAIAgent = async () => {
-    if (!apiKey) return alert('Ключ API не найден. Проверьте настройки Vercel Environment Variables!');
+const handleRunAIAgent = async () => {
+    if (!apiKey) return alert('Ключ API не найден. Проверьте настройки!');
     
     const tasksToProcess = tasks.filter(t => t.status === 'todo' && (!t.description || parseFloat(t.estimatedHours) === 0));
     if (tasksToProcess.length === 0) {
@@ -268,19 +271,36 @@ export default function App() {
     
     setIsAgentRunning(true);
     const targetTask = tasksToProcess[0];
-    const teamList = assistants.map(a => a.name).join(', ');
 
     try {
-      const systemPrompt = `Ты — автономный менеджер проектов. Пользователь набросал задачу: "${targetTask.text}".
-      Твоя команда: ${teamList}. Выбери наиболее подходящего исполнителя исходя из сути задачи.
-      ОТВЕТЬ СТРОГО В ФОРМАТЕ JSON: 
-      {
-        "description": "Краткий пошаговый план", 
-        "estimatedHours": 1.5, 
-        "urgent": true или false, 
-        "important": true или false,
-        "assignee": "Имя выбранного сотрудника"
-      }`;
+      let systemPrompt = '';
+      
+      // === ПРОВЕРКА: СОЛО ИЛИ КОМАНДА ===
+      if (isTeamMode && assistants.length > 1) {
+        // Командный режим: выбираем исполнителя
+        const teamList = assistants.map(a => a.name).join(', ');
+        systemPrompt = `Ты — автономный менеджер проектов. Пользователь набросал задачу: "${targetTask.text}".
+        Твоя команда: ${teamList}. Выбери наиболее подходящего исполнителя исходя из сути задачи.
+        ОТВЕТЬ СТРОГО В ФОРМАТЕ JSON: 
+        {
+          "description": "Краткий пошаговый план", 
+          "estimatedHours": 1.5, 
+          "urgent": true или false, 
+          "important": true или false,
+          "assignee": "Имя выбранного сотрудника"
+        }`;
+      } else {
+        // Соло режим (человек работает один): расписываем задачу для него
+        systemPrompt = `Ты — автономный менеджер проектов. Пользователь работает один. Задача: "${targetTask.text}".
+        Распиши подробный план выполнения этой задачи для пользователя.
+        ОТВЕТЬ СТРОГО В ФОРМАТЕ JSON: 
+        {
+          "description": "Краткий пошаговый план", 
+          "estimatedHours": 1.5, 
+          "urgent": true или false, 
+          "important": true или false
+        }`;
+      }
 
       const response = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', {
         method: 'POST',
@@ -290,69 +310,85 @@ export default function App() {
       
       const data = await response.json();
       
+      // Ловим ошибки, если что-то не так с API
+      if (!response.ok) {
+        throw new Error(data.error?.message || `Ошибка сервера: ${response.status}`);
+      }
+      
       if (data.choices) {
         let rawContent = data.choices[0].message.content.trim();
+        // Очищаем JSON, если ИИ прислал его с лишними символами Markdown
         if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiResult = JSON.parse(rawContent);
         
-        const targetAssistant = assistants.find(a => a.name === aiResult.assignee);
-
-        if (targetAssistant && targetAssistant.id !== currentAssistantId) {
-          const remainingTasks = tasks.filter(t => String(t.id) !== String(targetTask.id));
-          const updatedTask = {
-            ...targetTask,
-            description: `${aiResult.description || targetTask.description}`,
-            estimatedHours: aiResult.estimatedHours || 1,
-            urgent: aiResult.urgent,
-            important: aiResult.important
-          };
-
-          const assistantWorkspace = docData.workspaces[targetAssistant.id] || { tasks: [] };
-          const assistantTasks = assistantWorkspace.tasks || [];
-
-          await setDoc(doc(db, 'users', user.uid), {
-            workspaces: {
-              ...docData.workspaces,
-              [currentAssistantId]: { ...currentWorkspace, tasks: remainingTasks }, 
-              [targetAssistant.id]: { ...assistantWorkspace, tasks: [updatedTask, ...assistantTasks] }
-            }
-          }, { merge: true });
-
-          alert(`Агент перенес задачу в пространство сотрудника: ${aiResult.assignee}!`);
-        
-        } else {
-          updateWorkspace({ 
-            tasks: tasks.map(t => String(t.id) === String(targetTask.id) ? {
-              ...t, 
-              description: `👤 Исполнитель: ${aiResult.assignee || 'Вам'}\n\n${aiResult.description || t.description}`, 
-              assignee: aiResult.assignee, 
-              estimatedHours: aiResult.estimatedHours || 1, 
-              urgent: aiResult.urgent, 
+        // Если мы в командном режиме и ИИ выбрал кого-то другого
+        if (isTeamMode && aiResult.assignee) {
+          const targetAssistant = assistants.find(a => a.name === aiResult.assignee);
+          if (targetAssistant && targetAssistant.id !== currentAssistantId) {
+            const remainingTasks = tasks.filter(t => String(t.id) !== String(targetTask.id));
+            const updatedTask = {
+              ...targetTask,
+              description: `${aiResult.description || targetTask.description}`,
+              estimatedHours: aiResult.estimatedHours || 1,
+              urgent: aiResult.urgent,
               important: aiResult.important
-            } : t)
-          });
-          alert(`Агент успешно расписал задачу и оставил её у вас!`);
+            };
+
+            const assistantWorkspace = docData.workspaces[targetAssistant.id] || { tasks: [] };
+            const assistantTasks = assistantWorkspace.tasks || [];
+
+            await setDoc(doc(db, 'users', user.uid), {
+              workspaces: {
+                ...docData.workspaces,
+                [currentAssistantId]: { ...currentWorkspace, tasks: remainingTasks }, 
+                [targetAssistant.id]: { ...assistantWorkspace, tasks: [updatedTask, ...assistantTasks] }
+              }
+            }, { merge: true });
+
+            alert(`Агент перенес задачу в пространство сотрудника: ${aiResult.assignee}!`);
+            return; // Выходим из функции, так как задача перенесена
+          }
         }
-      } else if (data.error) {
-        alert('Ошибка от сервера ИИ: ' + data.error.message);
+        
+        // Если мы в соло режиме или ИИ оставил задачу нам
+        updateWorkspace({ 
+          tasks: tasks.map(t => String(t.id) === String(targetTask.id) ? {
+            ...t, 
+            // Добавляем пометку исполнителя только если это командный режим
+            description: (isTeamMode && aiResult.assignee ? `👤 Исполнитель: ${aiResult.assignee}\n\n` : '') + (aiResult.description || t.description), 
+            estimatedHours: aiResult.estimatedHours || 1, 
+            urgent: aiResult.urgent || false, 
+            important: aiResult.important || false
+          } : t)
+        });
+        alert(`Агент успешно расписал задачу!`);
       }
     } catch (error) { 
-      alert('Ошибка агента: ' + error.message); 
+      alert('Ошибка агента:\n' + error.message); 
     } finally { 
       setIsAgentRunning(false); 
     }
   };
 
-  const handleInviteColleague = async (e) => {
+ const handleInviteColleague = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
     const newAssistantId = `emp_${Date.now()}`;
     const newAssistantName = inviteEmail.split('@')[0];
     await setDoc(doc(db, 'users', user.uid), {
-      assistants: [...assistants, { id: newAssistantId, name: newAssistantName, email: inviteEmail, role: inviteRole }],
+      assistants: [...assistants, { 
+        id: newAssistantId, 
+        name: newAssistantName, 
+        email: inviteEmail, 
+        role: inviteRole,
+        position: invitePosition // Сохраняем должность
+      }],
       workspaces: { ...docData.workspaces, [newAssistantId]: { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } }
     }, { merge: true });
-    setIsInviteOpen(false); setInviteEmail('');
+    
+    setIsInviteOpen(false); 
+    setInviteEmail(''); 
+    setInvitePosition(''); // Очищаем поле
     alert(`Доступ PRO: Сотрудник ${inviteEmail} успешно добавлен в систему!`);
   };
   
@@ -471,13 +507,14 @@ const handleGenerateProcess = async () => {
     }
   };
 
-  const handleOpenEdit = (task) => {
+ const handleOpenEdit = (task) => {
     setEditingTaskId(task.id);
     setNewTaskTitle(task.text);
     setNewTaskDesc(task.description || '');
     setNewTaskHours(task.estimatedHours || '');
     setNewUrgent(task.urgent || false);
     setNewImportant(task.important || false);
+    setNewTaskAssignee(task.assignee || currentAssistantId); // Добавили исполнителя
     setIsCreateOpen(true);
   };
 
@@ -485,22 +522,56 @@ const handleGenerateProcess = async () => {
     setIsCreateOpen(false);
     setEditingTaskId(null);
     setNewTaskTitle(''); setNewTaskDesc(''); setNewTaskHours(''); setNewUrgent(false); setNewImportant(false);
+    setNewTaskAssignee(currentAssistantId); // Сбрасываем исполнителя
   };
 
-  const handleAddTask = (e) => {
+const handleAddTask = async (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
 
+    const baseTask = {
+      id: editingTaskId || Date.now(),
+      text: newTaskTitle,
+      description: newTaskDesc,
+      estimatedHours: parseFloat(newTaskHours) || 0,
+      urgent: newUrgent,
+      important: newImportant,
+      assignee: newTaskAssignee
+    };
+
     if (editingTaskId) {
-      updateWorkspace({ 
-        tasks: tasks.map(t => String(t.id) === String(editingTaskId) ? { 
-          ...t, text: newTaskTitle, description: newTaskDesc, estimatedHours: parseFloat(newTaskHours) || 0, urgent: newUrgent, important: newImportant 
-        } : t) 
-      });
+      const existingTask = tasks.find(t => String(t.id) === String(editingTaskId));
+      const updatedTask = { ...existingTask, ...baseTask };
+
+      // Если мы изменили исполнителя — переносим задачу в его пространство
+      if (newTaskAssignee !== currentAssistantId) {
+        const remainingTasks = tasks.filter(t => String(t.id) !== String(editingTaskId));
+        const targetWorkspace = docData.workspaces[newTaskAssignee] || { tasks: [] };
+        
+        await setDoc(doc(db, 'users', user.uid), {
+          workspaces: {
+            ...docData.workspaces,
+            [currentAssistantId]: { ...currentWorkspace, tasks: remainingTasks },
+            [newTaskAssignee]: { ...targetWorkspace, tasks: [updatedTask, ...(targetWorkspace.tasks || [])] }
+          }
+        }, { merge: true });
+      } else {
+        updateWorkspace({ tasks: tasks.map(t => String(t.id) === String(editingTaskId) ? updatedTask : t) });
+      }
     } else {
-      updateWorkspace({ 
-        tasks: [{ id: Date.now(), text: newTaskTitle, description: newTaskDesc, status: 'todo', estimatedHours: parseFloat(newTaskHours) || 0, urgent: newUrgent, important: newImportant }, ...tasks] 
-      });
+      const newTask = { ...baseTask, status: 'todo' };
+      // Если мы создаем задачу сразу для другого человека
+      if (newTaskAssignee !== currentAssistantId) {
+        const targetWorkspace = docData.workspaces[newTaskAssignee] || { tasks: [] };
+        await setDoc(doc(db, 'users', user.uid), {
+          workspaces: {
+            ...docData.workspaces,
+            [newTaskAssignee]: { ...targetWorkspace, tasks: [newTask, ...(targetWorkspace.tasks || [])] }
+          }
+        }, { merge: true });
+      } else {
+        updateWorkspace({ tasks: [newTask, ...tasks] });
+      }
     }
     closeCreateModal(); 
   };
@@ -835,7 +906,10 @@ const handleGenerateProcess = async () => {
                       {ast.name} 
                       {ast.id === 'manager' && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold uppercase">Владелец</span>}
                     </h3>
-                    <p className={`text-xs ${textMuted}`}>{ast.email || 'Полный доступ'}</p>
+                    <p className={`text-xs ${textMuted}`}>
+                      {ast.position && <span className="font-bold text-indigo-500 mr-2">{ast.position}</span>}
+                      {ast.email || 'Полный доступ'}
+                    </p>
                   </div>
                 </div>
                 {ast.id !== 'manager' && (
@@ -888,6 +962,7 @@ const handleGenerateProcess = async () => {
               <button onClick={() => setIsInviteOpen(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
             </div>
             <form onSubmit={handleInviteColleague} className="space-y-4">
+          
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Email сотрудника</label>
                 <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="hello@company.com" required className={`w-full px-4 py-4 rounded-2xl outline-none font-medium transition-all border-2 text-sm ${inputBg}`} autoFocus />
@@ -899,6 +974,22 @@ const handleGenerateProcess = async () => {
                   <option value="manager">Руководитель (Полный доступ)</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 mt-4">Должность (опционально)</label>
+                <input type="text" value={invitePosition} onChange={(e) => setInvitePosition(e.target.value)} placeholder="Например: Дизайнер, Сейлз" className={`w-full px-4 py-4 rounded-2xl outline-none font-medium transition-all border-2 text-sm ${inputBg}`} />
+              </div>
+              {isTeamMode && (
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 mt-4">Исполнитель</label>
+                  <select value={newTaskAssignee} onChange={(e) => setNewTaskAssignee(e.target.value)} className={`w-full px-4 py-4 rounded-2xl outline-none font-medium transition-all border-2 text-sm appearance-none cursor-pointer ${inputBg}`}>
+                    {assistants.map(a => (
+                      <option key={a.id} value={a.id} className={isDark ? 'bg-[#0E1116] text-white' : ''}>
+                        {a.id === 'manager' ? '👑 Вы (Владелец)' : `${a.name} ${a.position ? `— ${a.position}` : ''}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <button type="submit" className={`w-full mt-4 py-4 rounded-2xl font-bold text-white transition-all active:scale-95 shadow-lg ${isDark ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-900 hover:bg-slate-800'}`}>
                 Отправить приглашение
               </button>
