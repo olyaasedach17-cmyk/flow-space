@@ -472,6 +472,9 @@ export default function App() {
         toast.success(`Успешно создано задач: ${newTasks.length}`);
         
         notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
+        
+        // Закрываем модальное окно, если оно было открыто
+        setIsCreateOpen(false);
 
       } catch (err) {
         toast.error('Не удалось разобрать голос: ' + err.message);
@@ -872,8 +875,9 @@ export default function App() {
             <Bot className="w-5 h-5" /> <span>Ассистент</span>
           </button>
           
-          <button onClick={toggleVoiceInput} className={`w-14 h-14 -mt-6 rounded-full flex items-center justify-center font-bold text-xl shadow-xl active:scale-90 transition-transform ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/40' : 'bg-emerald-600 text-white shadow-emerald-600/40'}`}>
-            <Mic className="w-6 h-6" />
+          {/* ТЕПЕРЬ ЗДЕСЬ ПЛЮС ДЛЯ СОЗДАНИЯ ЗАДАЧИ */}
+          <button onClick={() => openTaskModal()} className="w-14 h-14 -mt-6 rounded-full flex items-center justify-center font-bold text-xl shadow-xl active:scale-90 transition-transform bg-emerald-600 text-white shadow-emerald-600/40">
+            <Plus className="w-6 h-6" />
           </button>
 
           <button onClick={() => setActiveTab('sops')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'sops' ? 'text-emerald-600' : 'text-slate-400'}`}>
@@ -1207,27 +1211,24 @@ export default function App() {
             <form onSubmit={handleSaveTask} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Название задачи</label>
-                <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Что нужно сделать?" required className={`w-full p-3.5 rounded-xl outline-none border text-sm font-medium ${inputBg}`} />
+                
+                {/* ПОЛЕ ВВОДА + КНОПКА МИКРОФОНА */}
+                <div className="flex gap-2">
+                  <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Что нужно сделать?" className={`flex-1 p-3.5 rounded-xl outline-none border text-sm font-medium ${inputBg}`} />
+                  <button type="button" onClick={toggleVoiceInput} className={`w-12 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${isListening ? 'bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'}`}>
+                    <Mic className="w-5 h-5" />
+                  </button>
+                </div>
+
                 <div className="flex gap-2 mt-2">
-                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1"><Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Расписать ИИ</button>
-                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Чек-лист ИИ</button>
+                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"><Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Расписать ИИ</button>
+                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Чек-лист ИИ</button>
                 </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Описание / ТЗ</label>
                 <textarea value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} rows="4" className={`w-full p-3.5 rounded-xl outline-none border text-xs resize-none ${inputBg}`} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Оценка (часы)</label>
-                  <input type="number" step="0.5" value={newTaskHours} onChange={(e) => setNewTaskHours(e.target.value)} placeholder="1.5" className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Дедлайн</label>
-                  <input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`} />
-                </div>
               </div>
 
               <div className="flex gap-2">
