@@ -9,6 +9,30 @@ import {
   sendPasswordResetEmail 
 } from 'firebase/auth';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { Toaster, toast } from 'sonner';
+import { 
+  Flame, 
+  Gem, 
+  Bot, 
+  User, 
+  Calendar, 
+  Plus, 
+  FolderArchive, 
+  BarChart3, 
+  Users, 
+  LayoutDashboard, 
+  Sun, 
+  Moon, 
+  Sparkles, 
+  Send, 
+  Trash2, 
+  Settings, 
+  Globe,
+  Clock,
+  ArrowRight,
+  X,
+  CheckCircle2
+} from 'lucide-react';
 
 // ==========================================
 // 1. КОНСТАНТЫ И НАСТРОЙКИ
@@ -43,7 +67,6 @@ const aiOptions = [
   { id: 'sheets', icon: '📊', label: 'Архитектор процессов' }
 ];
 
-// Вспомогательный метод безопасного вызова бэкенд ИИ через Vercel API
 async function callServerAI(endpointData) {
   const response = await fetch('/api/ai', {
     method: 'POST',
@@ -64,7 +87,7 @@ async function callServerAI(endpointData) {
 
 function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
   const cardBase = task.urgent 
-    ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50 border-red-200')
+    ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50/70 border-red-200')
     : (isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200');
 
   const textMain = isDark ? 'text-slate-100' : 'text-slate-900';
@@ -86,16 +109,31 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
         )}
 
         <div className="flex flex-wrap gap-1.5 items-center mt-1">
-          {task.urgent && <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-red-500/20 text-red-400 border border-red-500/30">🔥 Срочно</span>}
-          {task.important && <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">💎 Важно</span>}
-          {task.estimatedHours > 0 && <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-400 border border-slate-500/20">{task.estimatedHours}ч</span>}
-          {task.dueDate && <span className="px-2 py-0.5 text-[9px] font-bold rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">📅 {task.dueDate}</span>}
+          {task.urgent && (
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-red-500/20 text-red-400 border border-red-500/30">
+              <Flame className="w-3 h-3 text-red-400" /> Срочно
+            </span>
+          )}
+          {task.important && (
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              <Gem className="w-3 h-3 text-blue-400" /> Важно
+            </span>
+          )}
+          {task.estimatedHours > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-400 border border-slate-500/20">
+              <Clock className="w-3 h-3" /> {task.estimatedHours}ч
+            </span>
+          )}
+          {task.dueDate && (
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">
+              <Calendar className="w-3 h-3" /> {task.dueDate}
+            </span>
+          )}
         </div>
 
-        {/* Индикатор исполнителя только в командном режиме */}
         {isTeamMode && task.assigneeName && (
-          <div className="text-[10px] text-emerald-400 font-medium mt-1">
-            👤 {task.assigneeName}
+          <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium mt-1">
+            <User className="w-3 h-3" /> {task.assigneeName}
           </div>
         )}
       </div>
@@ -103,20 +141,20 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
       <div className="flex justify-between items-center pt-3 mt-2 border-t border-slate-100 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-1.5">
           {task.status === 'todo' && (
-            <button onClick={() => onQuickMove(task.id, 'in_progress')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700">В работу</button>
+            <button onClick={() => onQuickMove(task.id, 'in_progress')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">В работу</button>
           )}
           {task.status === 'in_progress' && (
             isTeamMode ? (
-              <button onClick={() => onQuickMove(task.id, 'review')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700">На проверку</button>
+              <button onClick={() => onQuickMove(task.id, 'review')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors">На проверку</button>
             ) : (
-              <button onClick={() => onQuickMove(task.id, 'done')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Готово ✓</button>
+              <button onClick={() => onQuickMove(task.id, 'done')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Готово ✓</button>
             )
           )}
           {task.status === 'review' && isTeamMode && (
-            <button onClick={() => onQuickMove(task.id, 'done')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Принять</button>
+            <button onClick={() => onQuickMove(task.id, 'done')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Принять</button>
           )}
         </div>
-        <span className="text-[10px] text-slate-400">Детали →</span>
+        <span className="text-[10px] text-slate-400 flex items-center gap-0.5">Детали <ArrowRight className="w-2.5 h-2.5" /></span>
       </div>
     </div>
   );
@@ -169,11 +207,9 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
   const t = (key) => translations['ru'][key] || key;
 
-  // Полноэкранные состояния карточки задачи
   const [selectedTask, setSelectedTask] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Форма задачи
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskHours, setNewTaskHours] = useState('');
@@ -185,14 +221,12 @@ export default function App() {
   const [isTaskGenerating, setIsTaskGenerating] = useState(false);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
 
-  // Чат Ассистента
   const [processRole, setProcessRole] = useState('copywriter');
   const [processTopic, setProcessTopic] = useState('');
   const [processMessages, setProcessMessages] = useState([]);
   const [followUpText, setFollowUpText] = useState('');
   const [isProcessGenerating, setIsProcessGenerating] = useState(false);
 
-  // Команда и приглашения
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePosition, setInvitePosition] = useState('');
@@ -238,28 +272,34 @@ export default function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     try {
-      if (isLogin) await signInWithEmailAndPassword(auth, email, password);
-      else await createUserWithEmailAndPassword(auth, email, password);
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password);
+        toast.success('Добро пожаловать в систему!');
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+        toast.success('Аккаунт успешно создан!');
+      }
     } catch (error) {
-      alert('Ошибка авторизации: ' + error.message);
+      toast.error('Ошибка авторизации: ' + error.message);
     }
   };
 
   const signInWithGoogle = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
+      toast.success('Успешный вход через Google');
     } catch (error) {
-      alert('Ошибка входа через Google: ' + error.message);
+      toast.error('Ошибка входа через Google: ' + error.message);
     }
   };
 
   const handleResetPassword = async () => {
-    if (!email) return alert('Пожалуйста, введите ваш Email в поле выше.');
+    if (!email) return toast.error('Пожалуйста, введите ваш Email в поле выше.');
     try {
       await sendPasswordResetEmail(auth, email);
-      alert('Письмо для сброса пароля отправлено! Проверьте вашу почту.');
+      toast.success('Письмо для сброса пароля отправлено на ваш e-mail.');
     } catch (error) {
-      alert('Ошибка сброса пароля: ' + error.message);
+      toast.error('Ошибка сброса пароля: ' + error.message);
     }
   };
 
@@ -269,7 +309,6 @@ export default function App() {
   const kpis = currentWorkspace.kpis || defaultKpis;
   const assistants = docData?.assistants || [];
   
-  // Автоматический флаг режима на основе выбора пользователя
   const isTeamMode = docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один');
 
   const todoTasks = tasks.filter(t => t.status === 'todo');
@@ -283,7 +322,6 @@ export default function App() {
     }, { merge: true });
   };
 
-  // --- Функция приглашения сотрудника ---
   const handleInviteColleague = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
@@ -307,13 +345,12 @@ export default function App() {
     setIsInviteOpen(false); 
     setInviteEmail(''); 
     setInvitePosition('');
-    alert(`Сотрудник ${inviteEmail} успешно добавлен в систему!`);
+    toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
   };
 
-  // --- ИИ-Функция: Умный Агент ---
   const handleRunAIAgent = async () => {
     const targetTask = tasks.find(t => t.status === 'todo' && (!t.description || parseFloat(t.estimatedHours) === 0));
-    if (!targetTask) return alert("Все задачи в бэклоге уже оформлены!");
+    if (!targetTask) return toast.info("Все задачи в бэклоге уже оформлены!");
 
     setIsAgentRunning(true);
     try {
@@ -341,15 +378,14 @@ export default function App() {
           assigneeName: isTeamMode ? aiResult.assignee : null
         } : t)
       });
-      alert('Агент успешно расписал задачу!');
+      toast.success('Агент успешно расписал задачу!');
     } catch (error) {
-      alert('Ошибка агента: ' + error.message);
+      toast.error('Ошибка агента: ' + error.message);
     } finally {
       setIsAgentRunning(false);
     }
   };
 
-  // --- ИИ-Функция: Генерация отчета по команде ---
   const handleGenerateTeamReport = async () => {
     setIsGeneratingReport(true);
     try {
@@ -360,16 +396,16 @@ export default function App() {
         temperature: 0.5
       });
       setTeamReport(data.choices[0].message.content.trim());
+      toast.success('Отчет сформирован');
     } catch (err) {
-      alert('Ошибка отчета: ' + err.message);
+      toast.error('Ошибка отчета: ' + err.message);
     } finally {
       setIsGeneratingReport(false);
     }
   };
 
-  // --- ИИ-Функция: Декомпозиция задач ---
   const handleTaskAI = async (mode) => {
-    if (!newTaskTitle.trim()) return alert('Введите название задачи!');
+    if (!newTaskTitle.trim()) return toast.error('Введите название задачи!');
     setIsTaskGenerating(true);
     try {
       const prompt = mode === 'expand' 
@@ -384,14 +420,14 @@ export default function App() {
         ]
       });
       setNewTaskDesc(data.choices[0].message.content.trim());
+      toast.success('Текст сформирован');
     } catch (err) {
-      alert('Ошибка ИИ: ' + err.message);
+      toast.error('Ошибка ИИ: ' + err.message);
     } finally {
       setIsTaskGenerating(false);
     }
   };
 
-  // --- ИИ-Функция: Ассистент (Чат) ---
   const handleGenerateProcess = async () => {
     if (!processTopic.trim()) return;
     setIsProcessGenerating(true);
@@ -415,7 +451,7 @@ export default function App() {
       ]);
       setProcessTopic('');
     } catch (err) {
-      alert('Ошибка Ассистента: ' + err.message);
+      toast.error('Ошибка Ассистента: ' + err.message);
     } finally {
       setIsProcessGenerating(false);
     }
@@ -445,13 +481,12 @@ export default function App() {
       ]);
       setFollowUpText('');
     } catch (err) {
-      alert('Ошибка диалога: ' + err.message);
+      toast.error('Ошибка диалога: ' + err.message);
     } finally {
       setIsProcessGenerating(false);
     }
   };
 
-  // Управление задачами
   const handleSaveTask = (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
@@ -470,8 +505,10 @@ export default function App() {
 
     if (selectedTask) {
       updateWorkspace({ tasks: tasks.map(t => t.id === selectedTask.id ? taskObj : t) });
+      toast.success('Задача обновлена');
     } else {
       updateWorkspace({ tasks: [taskObj, ...tasks] });
+      toast.success('Новая задача создана');
     }
 
     closeModal();
@@ -485,6 +522,7 @@ export default function App() {
           tasks: tasks.filter(t => t.id !== taskId),
           archive: [{ ...taskToArchive, status: 'done' }, ...archive]
         });
+        toast.success('Задача перенесена в Архив');
       }
     } else {
       updateWorkspace({
@@ -495,6 +533,7 @@ export default function App() {
 
   const handleDeleteTask = (taskId) => {
     updateWorkspace({ tasks: tasks.filter(t => t.id !== taskId) });
+    toast.success('Задача удалена');
     closeModal();
   };
 
@@ -530,6 +569,7 @@ export default function App() {
       settings: { isTeamMode: isTeam, teamSize: onboardTeam }
     }, { merge: true });
     setShowOnboarding(false);
+    toast.success('Настройки сохранены');
   };
 
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
@@ -539,6 +579,7 @@ export default function App() {
 
   if (!user || !docData) return (
     <div className={`min-h-screen flex items-center justify-center p-4 font-sans ${themeBg}`}>
+      <Toaster position="top-center" richColors />
       <div className={`p-8 rounded-[32px] max-w-md w-full border ${cardBg}`}>
         <h1 className={`text-2xl font-black text-center mb-6 tracking-tight ${textMain}`}>Flow Space</h1>
         <form onSubmit={handleAuth} className="space-y-3">
@@ -554,7 +595,7 @@ export default function App() {
           onClick={signInWithGoogle} 
           className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-[#0E1116] border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}
         >
-          <span>🌐</span> Войти через Google
+          <Globe className="w-4 h-4 text-emerald-500" /> Войти через Google
         </button>
 
         <div className="mt-6 flex flex-col items-center gap-2">
@@ -573,6 +614,7 @@ export default function App() {
 
   return (
     <div className={`min-h-screen font-sans pb-28 md:pb-8 md:pl-64 ${themeBg}`}>
+      <Toaster position="top-center" richColors />
       
       {/* ДЕСКТОПНОЕ МЕНЮ */}
       <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-2 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200'}`}>
@@ -581,47 +623,70 @@ export default function App() {
           <h1 className={`text-lg font-black tracking-tight ${textMain}`}>Flow Space</h1>
         </div>
 
-        <button onClick={() => openTaskModal()} className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm mb-4 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
-          + Создать задачу
+        <button onClick={() => openTaskModal()} className="flex items-center justify-center gap-2 w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm mb-4 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
+          <Plus className="w-4 h-4" /> Создать задачу
         </button>
 
-        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'matrix' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>📋 Задачи</button>
-        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'processes' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>🤖 Ассистент</button>
+        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'matrix' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+          <LayoutDashboard className="w-4 h-4" /> Задачи
+        </button>
+        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'processes' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+          <Bot className="w-4 h-4" /> Ассистент
+        </button>
         
-        {/* КОМАНДА И АНАЛИТИКА — ТОЛЬКО В КОМАНДНОМ РЕЖИМЕ */}
         {isTeamMode && (
           <>
-            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'team' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>👥 Команда</button>
-            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'kpi' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>📊 Сводка SLA</button>
+            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'team' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+              <Users className="w-4 h-4" /> Команда
+            </button>
+            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'kpi' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+              <BarChart3 className="w-4 h-4" /> Сводка SLA
+            </button>
           </>
         )}
 
-        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'archive' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>📂 Архив</button>
+        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'archive' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+          <FolderArchive className="w-4 h-4" /> Архив
+        </button>
 
         <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-2">
-          <button onClick={() => setShowOnboarding(true)} className="text-xs font-bold text-slate-400 px-2 hover:text-slate-200">⚙️ Режим: {isTeamMode ? 'Команда' : 'Соло'}</button>
-          <button onClick={() => signOut(auth)} className="w-full text-left px-2 py-2 text-xs font-bold text-red-400 hover:underline">Выйти из аккаунта</button>
+          <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-400 px-2 hover:text-slate-200">
+            <Settings className="w-3.5 h-3.5" /> Режим: {isTeamMode ? 'Команда' : 'Соло'}
+          </button>
+          <button onClick={() => signOut(auth)} className="flex items-center gap-2 w-full text-left px-2 py-2 text-xs font-bold text-red-400 hover:underline">
+            <LogOut className="w-3.5 h-3.5" /> Выйти из аккаунта
+          </button>
         </div>
       </nav>
 
       {/* МОБИЛЬНАЯ НАВИГАЦИЯ */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-40">
         <div className={`flex justify-around items-center px-4 py-3 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/90 border-white/10' : 'bg-white/90 border-slate-200'}`}>
-          <button onClick={() => setActiveTab('matrix')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'matrix' ? 'text-emerald-500' : 'text-slate-400'}`}>📋 <span>Задачи</span></button>
-          <button onClick={() => setActiveTab('processes')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'processes' ? 'text-emerald-500' : 'text-slate-400'}`}>🤖 <span>Ассистент</span></button>
+          <button onClick={() => setActiveTab('matrix')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'matrix' ? 'text-emerald-500' : 'text-slate-400'}`}>
+            <LayoutDashboard className="w-4 h-4" /> <span>Задачи</span>
+          </button>
+          <button onClick={() => setActiveTab('processes')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'processes' ? 'text-emerald-500' : 'text-slate-400'}`}>
+            <Bot className="w-4 h-4" /> <span>Ассистент</span>
+          </button>
           
           <button onClick={() => openTaskModal()} className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-600/30 active:scale-90 transition-transform">
-            +
+            <Plus className="w-6 h-6" />
           </button>
 
           {isTeamMode ? (
-            <button onClick={() => setActiveTab('team')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'team' ? 'text-emerald-500' : 'text-slate-400'}`}>👥 <span>Команда</span></button>
+            <button onClick={() => setActiveTab('team')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'team' ? 'text-emerald-500' : 'text-slate-400'}`}>
+              <Users className="w-4 h-4" /> <span>Команда</span>
+            </button>
           ) : (
-            <button onClick={() => setActiveTab('archive')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'archive' ? 'text-emerald-500' : 'text-slate-400'}`}>📂 <span>Архив</span></button>
+            <button onClick={() => setActiveTab('archive')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'archive' ? 'text-emerald-500' : 'text-slate-400'}`}>
+              <FolderArchive className="w-4 h-4" /> <span>Архив</span>
+            </button>
           )}
 
           {isTeamMode && (
-            <button onClick={() => setActiveTab('kpi')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'kpi' ? 'text-emerald-500' : 'text-slate-400'}`}>📊 <span>Сводка</span></button>
+            <button onClick={() => setActiveTab('kpi')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'kpi' ? 'text-emerald-500' : 'text-slate-400'}`}>
+              <BarChart3 className="w-4 h-4" /> <span>Сводка</span>
+            </button>
           )}
         </div>
       </div>
@@ -629,7 +694,6 @@ export default function App() {
       {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
         
-        {/* Шапка */}
         <header className="flex justify-between items-center mb-6 pt-2">
           <div>
             <h2 className={`text-xl font-black ${textMain}`}>
@@ -638,7 +702,7 @@ export default function App() {
             <p className="text-xs text-slate-400 mt-0.5">{isTeamMode ? 'Управление процессами и сотрудниками' : 'Фокус на личных задачах'}</p>
           </div>
           <button onClick={() => setIsDark(!isDark)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base">
-            {isDark ? '☀️' : '🌙'}
+            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
           </button>
         </header>
 
@@ -647,7 +711,9 @@ export default function App() {
           <div className="space-y-6">
             <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-emerald-50/50 border-emerald-100'}`}>
               <div>
-                <h3 className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-emerald-400' : 'text-emerald-900'}`}>Умный Агент</h3>
+                <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-emerald-400' : 'text-emerald-900'}`}>
+                  <Sparkles className="w-3.5 h-3.5" /> Умный Агент
+                </h3>
                 <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляет подробный план.</p>
               </div>
               <button onClick={handleRunAIAgent} disabled={isAgentRunning} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-md shadow-emerald-600/20">
@@ -655,12 +721,10 @@ export default function App() {
               </button>
             </div>
 
-            {/* СТОЛБЦЫ KANBAN */}
             <div className={`grid grid-cols-1 ${isTeamMode ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
               <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
               <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
               
-              {/* НА ПРОВЕРКЕ — ТОЛЬКО В КОМАНДНОМ РЕЖИМЕ */}
               {isTeamMode && (
                 <TaskColumn title={t('colReview')} colorClass="bg-amber-500" tasks={reviewTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
               )}
@@ -698,18 +762,21 @@ export default function App() {
               <button 
                 onClick={handleGenerateProcess} 
                 disabled={isProcessGenerating || !processTopic.trim()} 
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-transform active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-600/20"
+                className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-transform active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-600/20"
               >
+                <Send className="w-3.5 h-3.5" />
                 {isProcessGenerating ? 'Обработка запроса...' : 'Отправить запрос'}
               </button>
             </div>
 
-            {/* ИСТОРИЯ ЧАТА */}
             {processMessages.length > 0 && (
               <div className="space-y-4">
                 {processMessages.map((msg, idx) => (
                   <div key={idx} className={`p-5 rounded-2xl border text-sm ${msg.role === 'user' ? 'bg-emerald-600/10 border-emerald-500/20 text-emerald-300 ml-6' : `${cardBg} mr-6`}`}>
-                    <div className="font-bold text-xs mb-2 opacity-60">{msg.role === 'user' ? '👤 Ваш запрос' : '🤖 Ответ Ассистента'}</div>
+                    <div className="font-bold text-xs mb-2 opacity-60 flex items-center gap-1.5">
+                      {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3 text-emerald-500" />}
+                      {msg.role === 'user' ? 'Ваш запрос' : 'Ответ Ассистента'}
+                    </div>
                     <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
                   </div>
                 ))}
@@ -723,8 +790,8 @@ export default function App() {
                     placeholder="Уточнить или попросить переделать..." 
                     className="flex-1 bg-transparent outline-none text-xs font-medium" 
                   />
-                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className="px-4 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-xs">
-                    Отправить
+                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className="px-4 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-xs flex items-center gap-1">
+                    <Send className="w-3 h-3" /> Отправить
                   </button>
                 </div>
               </div>
@@ -732,7 +799,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ВКЛАДКА: КОМАНДА И ДОСТУПЫ (ТОЛЬКО В КОМАНДНОМ РЕЖИМЕ) */}
+        {/* ВКЛАДКА: КОМАНДА */}
         {activeTab === 'team' && isTeamMode && (
           <div className="space-y-6 max-w-4xl mx-auto">
             <div className={`p-6 rounded-3xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardBg}`}>
@@ -742,9 +809,9 @@ export default function App() {
               </div>
               <button 
                 onClick={() => setIsInviteOpen(true)} 
-                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                className="flex items-center gap-1.5 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
               >
-                + Пригласить сотрудника
+                <Plus className="w-4 h-4" /> Пригласить сотрудника
               </button>
             </div>
 
@@ -756,7 +823,9 @@ export default function App() {
                       {ast.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h4 className={`font-bold text-sm ${textMain}`}>{ast.name} {ast.id === 'manager' && '👑'}</h4>
+                      <h4 className={`font-bold text-sm flex items-center gap-1.5 ${textMain}`}>
+                        {ast.name} {ast.id === 'manager' && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
+                      </h4>
                       <p className="text-xs text-slate-400">
                         {ast.position ? `${ast.position} • ` : ''}{ast.email || 'Владелец аккаунта'}
                       </p>
@@ -771,7 +840,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ВКЛАДКА: СВОДКА (ТОЛЬКО ДЛЯ КОМАНДЫ) */}
+        {/* ВКЛАДКА: СВОДКА */}
         {activeTab === 'kpi' && isTeamMode && (
           <div className="space-y-6 max-w-4xl mx-auto">
             <div className={`p-6 rounded-3xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardBg}`}>
@@ -816,7 +885,7 @@ export default function App() {
               archive.map(task => (
                 <div key={task.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
                   <span className="text-sm font-semibold line-through text-slate-400">{task.text}</span>
-                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-emerald-400">Восстановить</button>
+                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-emerald-400 hover:underline">Восстановить</button>
                 </div>
               ))
             )}
@@ -831,7 +900,7 @@ export default function App() {
           <div className={`w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-6 border shadow-2xl max-h-[90vh] overflow-y-auto ${cardBg}`}>
             <div className="flex justify-between items-center mb-4">
               <h3 className={`text-base font-bold ${textMain}`}>{selectedTask ? 'Редактирование задачи' : 'Новая задача'}</h3>
-              <button onClick={closeModal} className="text-slate-400 text-lg font-bold">✕</button>
+              <button onClick={closeModal} className="text-slate-400 text-lg font-bold hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleSaveTask} className="space-y-4">
@@ -839,8 +908,8 @@ export default function App() {
                 <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Название задачи</label>
                 <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Что нужно сделать?" required className={`w-full p-3.5 rounded-xl outline-none border text-sm font-medium ${inputBg}`} />
                 <div className="flex gap-2 mt-2">
-                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold">Расписать ИИ</button>
-                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold">Чек-лист ИИ</button>
+                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1"><Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Расписать ИИ</button>
+                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Чек-лист ИИ</button>
                 </div>
               </div>
 
@@ -861,8 +930,12 @@ export default function App() {
               </div>
 
               <div className="flex gap-2">
-                <button type="button" onClick={() => setNewUrgent(!newUrgent)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border ${newUrgent ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>🔥 Срочно</button>
-                <button type="button" onClick={() => setNewImportant(!newImportant)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border ${newImportant ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>💎 Важно</button>
+                <button type="button" onClick={() => setNewUrgent(!newUrgent)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newUrgent ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
+                  <Flame className="w-3.5 h-3.5" /> Срочно
+                </button>
+                <button type="button" onClick={() => setNewImportant(!newImportant)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newImportant ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
+                  <Gem className="w-3.5 h-3.5" /> Важно
+                </button>
               </div>
 
               {isTeamMode && (
@@ -879,8 +952,8 @@ export default function App() {
               </button>
 
               {selectedTask && (
-                <button type="button" onClick={() => handleDeleteTask(selectedTask.id)} className="w-full py-2 text-xs font-bold text-red-400 hover:underline text-center block">
-                  Удалить задачу
+                <button type="button" onClick={() => handleDeleteTask(selectedTask.id)} className="w-full py-2 text-xs font-bold text-red-400 hover:underline text-center flex items-center justify-center gap-1">
+                  <Trash2 className="w-3.5 h-3.5" /> Удалить задачу
                 </button>
               )}
             </form>
@@ -894,7 +967,7 @@ export default function App() {
           <div className={`w-full max-w-sm rounded-3xl p-6 border shadow-2xl ${cardBg}`}>
             <div className="flex justify-between items-center mb-4">
               <h3 className={`text-base font-bold ${textMain}`}>Пригласить сотрудника</h3>
-              <button onClick={() => setIsInviteOpen(false)} className="text-slate-400 font-bold">✕</button>
+              <button onClick={() => setIsInviteOpen(false)} className="text-slate-400 font-bold"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleInviteColleague} className="space-y-4">
               <div>
