@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { auth, db, googleProvider } from './firebase';
 import { 
   onAuthStateChanged, 
@@ -8,7 +8,7 @@ import {
   signInWithPopup, 
   sendPasswordResetEmail 
 } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { Toaster, toast } from 'sonner';
 import { 
   Flame, 
@@ -35,8 +35,10 @@ import {
   LogOut,
   Filter,
   Tag,
-  Gift,
-  Award
+  Award,
+  Mic,
+  BookOpen,
+  Copy
 } from 'lucide-react';
 
 // ==========================================
@@ -212,6 +214,10 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
   const t = (key) => translations['ru'][key] || key;
 
+  // Голосовой ввод
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+
   const [selectedTask, setSelectedTask] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -233,12 +239,14 @@ export default function App() {
   const [isTaskGenerating, setIsTaskGenerating] = useState(false);
   const [isAgentRunning, setIsAgentRunning] = useState(false);
 
+  // Ассистент
   const [processRole, setProcessRole] = useState('copywriter');
   const [processTopic, setProcessTopic] = useState('');
   const [processMessages, setProcessMessages] = useState([]);
   const [followUpText, setFollowUpText] = useState('');
   const [isProcessGenerating, setIsProcessGenerating] = useState(false);
 
+  // Команда
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePosition, setInvitePosition] = useState('');
@@ -276,7 +284,7 @@ export default function App() {
           appliedPromo: null,
           settings: { isTeamMode: false, teamSize: '👤 Я один' },
           assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель', role: 'manager' }],
-          workspaces: { 'manager': { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } }
+          workspaces: { 'manager': { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } }
         });
       }
     });
@@ -320,6 +328,7 @@ export default function App() {
   const currentWorkspace = docData?.workspaces?.[currentAssistantId] || {};
   const tasks = currentWorkspace.tasks || [];
   const archive = currentWorkspace.archive || [];
+  const sops = currentWorkspace.sops || [];
   const kpis = currentWorkspace.kpis || defaultKpis;
   const assistants = docData?.assistants || [];
   
@@ -333,7 +342,6 @@ export default function App() {
     setIsApplyingPromo(true);
 
     try {
-      // Имитация или реальная проверка через БД
       await setDoc(doc(db, 'users', user.uid), {
         appliedPromo: code,
         isPro: true,
@@ -382,7 +390,7 @@ export default function App() {
       }],
       workspaces: { 
         ...docData.workspaces, 
-        [newAssistantId]: { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } 
+        [newAssistantId]: { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } 
       }
     }, { merge: true });
     
@@ -390,6 +398,69 @@ export default function App() {
     setInviteEmail(''); 
     setInvitePosition('');
     toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
+  };
+
+  // 🔥 ГОЛОСОВОЙ ВВОД (Voice-to-Task)
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      return toast.error('Ваш браузер не поддерживает голосовой ввод. Используйте Chrome или Safari.');
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.interimResults = false;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    
+    recognition.onresult = async (event) => {
+      const transcript = event.results[0][0].transcript;
+      toast.info('🎙 Обработка голоса ИИ...', { duration: 4000 });
+      setIsListening(false);
+
+      try {
+        const prompt = `Пользователь надиктовал: "${transcript}".
+        Выдели из текста задачи. Верни ТОЛЬКО валидный JSON-массив объектов:
+        [{"text": "Краткое название", "description": "Детали", "assignee": "Имя (если звучит)", "urgent": true/false, "important": true/false}]
+        Если исполнитель не назван, оставь null.`;
+
+        const response = await callServerAI({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: prompt }],
+          temperature: 0.1
+        });
+
+        let rawContent = response.choices[0].message.content.trim();
+        if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+        const aiTasks = JSON.parse(rawContent);
+
+        const newTasks = aiTasks.map((t, idx) => ({
+          id: Date.now() + idx,
+          text: t.text,
+          description: t.description || '',
+          estimatedHours: 1,
+          urgent: t.urgent || false,
+          important: t.important || false,
+          status: 'todo',
+          assigneeName: isTeamMode && t.assignee ? (assistants.find(a => a.name.toLowerCase().includes(t.assignee.toLowerCase()))?.name || null) : null
+        }));
+
+        updateWorkspace({ tasks: [...newTasks, ...tasks] });
+        toast.success(`Успешно создано задач: ${newTasks.length}`);
+      } catch (err) {
+        toast.error('Не удалось разобрать голос: ' + err.message);
+      }
+    };
+
+    recognition.onerror = () => setIsListening(false);
+    recognition.start();
   };
 
   const handleRunAIAgent = async () => {
@@ -433,7 +504,7 @@ export default function App() {
   const handleGenerateTeamReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const prompt = `Проанализируй состояние команды: Всего задач: ${tasks.length}, В работе: ${inProgressTasks.length}, На проверке: ${reviewTasks.length}. Напиши краткую сводку для руководителя из 3 пунктов: Эффективность, Риски, Рекомендация.`;
+      const prompt = `Проанализируй состояние команды: Всего задач: ${tasks.length}, В работе: ${inProgressTasks.length}, На проверке: ${reviewTasks.length}. Напиши строгую бизнес-сводку для инвестора/владельца из 3 пунктов: 1. Статус производства, 2. Риски, 3. Решение.`;
       const data = await callServerAI({
         model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: prompt }],
@@ -446,6 +517,11 @@ export default function App() {
     } finally {
       setIsGeneratingReport(false);
     }
+  };
+
+  const handleCopyReport = () => {
+    navigator.clipboard.writeText(`📊 ОТЧЕТ ПО ПРОЕКТУ\n\n${teamReport}\n\nСформировано в Flow Space ИИ.`);
+    toast.success('Отчет скопирован в буфер обмена!');
   };
 
   const handleTaskAI = async (mode) => {
@@ -530,6 +606,36 @@ export default function App() {
     } finally {
       setIsProcessGenerating(false);
     }
+  };
+
+  // 🔥 СОХРАНЕНИЕ РЕГЛАМЕНТА (SOP)
+  const handleSaveToSOP = async (content) => {
+    toast.info('Генерация названия для регламента...');
+    try {
+      const response = await callServerAI({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'system', content: `Придумай короткий заголовок (до 5 слов) для этого документа: ${content.substring(0, 500)}` }],
+        temperature: 0.3
+      });
+      const title = response.choices[0].message.content.trim().replace(/["']/g, '');
+      
+      const newSOP = {
+        id: Date.now(),
+        title: title,
+        content: content,
+        date: new Date().toLocaleDateString('ru-RU')
+      };
+
+      updateWorkspace({ sops: [newSOP, ...sops] });
+      toast.success('Документ сохранен в Базу Регламентов!');
+    } catch (err) {
+      toast.error('Ошибка сохранения регламента');
+    }
+  };
+
+  const handleDeleteSOP = (id) => {
+    updateWorkspace({ sops: sops.filter(s => s.id !== id) });
+    toast.success('Регламент удален');
   };
 
   const handleCreateTaskFromAI = (content) => {
@@ -687,15 +793,24 @@ export default function App() {
           )}
         </div>
 
-        <button onClick={() => openTaskModal()} className="flex items-center justify-center gap-2 w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm mb-4 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
-          <Plus className="w-4 h-4" /> Создать задачу
-        </button>
+        {/* КНОПКИ СОЗДАНИЯ И ГОЛОСОВОГО ВВОДА */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => openTaskModal()} className="flex-1 flex items-center justify-center gap-2 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
+            <Plus className="w-4 h-4" /> Задача
+          </button>
+          <button onClick={toggleVoiceInput} className={`w-11 h-11 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${isListening ? 'bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'}`}>
+            <Mic className="w-5 h-5" />
+          </button>
+        </div>
 
         <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'matrix' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
           <LayoutDashboard className="w-4 h-4" /> Задачи
         </button>
         <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'processes' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
           <Bot className="w-4 h-4" /> Ассистент
+        </button>
+        <button onClick={() => setActiveTab('sops')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'sops' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+          <BookOpen className="w-4 h-4" /> Регламенты
         </button>
         
         {isTeamMode && (
@@ -733,8 +848,12 @@ export default function App() {
             <Bot className="w-4 h-4" /> <span>Ассистент</span>
           </button>
           
-          <button onClick={() => openTaskModal()} className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-600/30 active:scale-90 transition-transform">
-            <Plus className="w-6 h-6" />
+          <button onClick={toggleVoiceInput} className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl shadow-lg active:scale-90 transition-transform ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/40' : 'bg-emerald-600 text-white shadow-emerald-600/30'}`}>
+            <Mic className="w-5 h-5" />
+          </button>
+
+          <button onClick={() => setActiveTab('sops')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'sops' ? 'text-emerald-500' : 'text-slate-400'}`}>
+            <BookOpen className="w-4 h-4" /> <span>SOPs</span>
           </button>
 
           {isTeamMode ? (
@@ -744,12 +863,6 @@ export default function App() {
           ) : (
             <button onClick={() => setActiveTab('archive')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'archive' ? 'text-emerald-500' : 'text-slate-400'}`}>
               <FolderArchive className="w-4 h-4" /> <span>Архив</span>
-            </button>
-          )}
-
-          {isTeamMode && (
-            <button onClick={() => setActiveTab('kpi')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'kpi' ? 'text-emerald-500' : 'text-slate-400'}`}>
-              <BarChart3 className="w-4 h-4" /> <span>Сводка</span>
             </button>
           )}
         </div>
@@ -871,12 +984,20 @@ export default function App() {
                     <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
 
                     {msg.role === 'assistant' && (
-                      <button 
-                        onClick={() => handleCreateTaskFromAI(msg.content)} 
-                        className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors flex items-center gap-1.5 mt-4"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Создать задачу из этого ответа
-                      </button>
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
+                        <button 
+                          onClick={() => handleCreateTaskFromAI(msg.content)} 
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Создать задачу из этого ответа
+                        </button>
+                        <button 
+                          onClick={() => handleSaveToSOP(msg.content)} 
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition-colors flex items-center gap-1.5"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" /> Сохранить как Регламент
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -896,6 +1017,35 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ВКЛАДКА: РЕГЛАМЕНТЫ (SOPS) */}
+        {activeTab === 'sops' && (
+          <div className="space-y-4 max-w-4xl mx-auto">
+            <h3 className={`text-lg font-bold ${textMain}`}>База Регламентов (SOP)</h3>
+            {sops.length === 0 ? (
+              <p className="text-xs text-slate-400">Сохраняйте ответы ИИ-юриста и бизнес-консультанта сюда.</p>
+            ) : null}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {sops.map(sop => (
+                <div key={sop.id} className={`p-5 rounded-2xl border flex flex-col ${cardBg}`}>
+                  <div className="flex justify-between items-start mb-3">
+                    <h4 className="font-bold text-sm text-emerald-400 leading-snug pr-4">{sop.title}</h4>
+                    <span className="text-[10px] text-slate-500 whitespace-nowrap">{sop.date}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 line-clamp-4 mb-4">{sop.content}</p>
+                  <div className="mt-auto flex justify-between items-center pt-3 border-t border-slate-200 dark:border-white/10">
+                    <button onClick={() => { navigator.clipboard.writeText(sop.content); toast.success('Скопировано'); }} className="text-xs font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1">
+                      <Copy className="w-3.5 h-3.5"/> Копировать
+                    </button>
+                    <button onClick={() => handleDeleteSOP(sop.id)} className="text-xs font-bold text-red-400 hover:text-red-300">
+                      <Trash2 className="w-3.5 h-3.5"/>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -962,7 +1112,10 @@ export default function App() {
             </div>
 
             {teamReport && (
-              <div className={`p-6 rounded-3xl border ${cardBg}`}>
+              <div className={`p-6 rounded-3xl border relative ${cardBg}`}>
+                <button onClick={handleCopyReport} className="absolute top-4 right-4 p-2 bg-slate-800 rounded-lg hover:bg-slate-700 text-emerald-400 transition-colors" title="Скопировать отчет">
+                  <Copy className="w-4 h-4" />
+                </button>
                 <div className="whitespace-pre-wrap text-sm leading-relaxed">{teamReport}</div>
               </div>
             )}
