@@ -60,6 +60,7 @@ const translations = {
     empty: 'Задач пока нет',
   }
 };
+
 const defaultKpis = [
   { id: 1, name: 'Соблюдение сроков (SLA)', weight: 40, max: 100, score: 92, desc: 'Процент задач, закрытых до дедлайна.' },
   { id: 2, name: 'Качество (без возвратов)', weight: 35, max: 100, score: 88, desc: 'Задачи, принятые руководителем с первого раза.' },
@@ -191,7 +192,7 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
   );
 }
 
-function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, onSelectTask, onQuickMove }) {
+function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, t, onSelectTask, onQuickMove }) {
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 mb-3 px-1">
@@ -203,7 +204,7 @@ function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, onSelectTask
       <div className="space-y-3 grow">
         {tasks.length === 0 ? (
           <div className={`text-center py-6 rounded-2xl border border-dashed text-xs ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
-            Задач пока нет
+            {t('empty')}
           </div>
         ) : (
           tasks.map(task => (
@@ -234,7 +235,11 @@ export default function App() {
   const [docData, setDocData] = useState(null);
   const [currentAssistantId, setCurrentAssistantId] = useState('manager');
 
-  
+  // ВОССТАНОВЛЕННЫЕ ПЕРЕМЕННЫЕ, ИЗ-ЗА КОТОРЫХ БЫЛА ОШИБКА
+  const [activeTab, setActiveTab] = useState('matrix');
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
+  const t = (key) => translations['ru'][key] || key;
+
   // Голосовой ввод
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
