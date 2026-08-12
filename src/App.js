@@ -870,50 +870,39 @@ export default function App() {
         </div>
       </nav>
 
-      {/* МОБИЛЬНАЯ НАВИГАЦИЯ (Исправленная) */}
-<div className="md:hidden fixed bottom-4 left-2 right-2 z-40">
-  <div className={`flex justify-around items-center px-2 py-3.5 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/85 border-white/10' : 'bg-white/85 border-slate-200 shadow-slate-200/50'}`}>
-    <button onClick={() => setActiveTab('matrix')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'matrix' ? 'text-emerald-600' : 'text-slate-400'}`}>
-      <LayoutDashboard className="w-5 h-5" /> <span>Задачи</span>
-    </button>
-    <button onClick={() => setActiveTab('processes')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'processes' ? 'text-emerald-600' : 'text-slate-400'}`}>
-      <Bot className="w-5 h-5" /> <span>Ассистент</span>
-    </button>
-    
-    <button onClick={toggleVoiceInput} className={`w-14 h-14 -mt-6 rounded-full flex items-center justify-center font-bold text-xl shadow-xl active:scale-90 transition-transform ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/40' : 'bg-emerald-600 text-white shadow-emerald-600/40'}`}>
-      <Mic className="w-6 h-6" />
-    </button>
-
-    <button onClick={() => setActiveTab('sops')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'sops' ? 'text-emerald-600' : 'text-slate-400'}`}>
-      <BookOpen className="w-5 h-5" /> <span>SOPs</span>
-    </button>
-
-    {isTeamMode ? (
-      <button onClick={() => setActiveTab('team')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'team' ? 'text-emerald-600' : 'text-slate-400'}`}>
-        <Users className="w-5 h-5" /> <span>Команда</span>
-      </button>
-    ) : (
-      <button onClick={() => setActiveTab('archive')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'archive' ? 'text-emerald-600' : 'text-slate-400'}`}>
-        <FolderArchive className="w-5 h-5" /> <span>Архив</span>
-      </button>
-    )}
-  </div>
-</div>
+      
 
       {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
         
-        <header className="flex justify-between items-center mb-6 pt-2">
+        <header className="flex justify-between items-start sm:items-center mb-4 pt-2">
           <div>
             <h2 className={`text-xl font-black ${textMain}`}>
               {isTeamMode ? 'Командная доска' : 'Личное пространство'}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">{isTeamMode ? 'Управление процессами и сотрудниками' : 'Фокус на личных задачах'}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{isTeamMode ? 'Управление процессами' : 'Фокус на личных задачах'}</p>
           </div>
-          <button onClick={() => setIsDark(!isDark)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base">
-            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Кнопка Настроек (для мобильных) */}
+            <button onClick={() => setShowOnboarding(true)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform">
+              <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            </button>
+            <button onClick={() => setIsDark(!isDark)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform">
+              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+            </button>
+          </div>
         </header>
+
+        {/* МОБИЛЬНЫЕ ВКЛАДКИ (Команда, Сводка, Архив) */}
+        <div className="md:hidden flex items-center gap-2 overflow-x-auto pb-4 mb-2" style={{ scrollbarWidth: 'none' }}>
+          {isTeamMode && (
+            <>
+              <button onClick={() => setActiveTab('team')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'team' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>👥 Команда</button>
+              <button onClick={() => setActiveTab('kpi')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'kpi' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>📊 Сводка SLA</button>
+            </>
+          )}
+          <button onClick={() => setActiveTab('archive')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'archive' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>📦 Архив задач</button>
+        </div>
 
         {/* ВКЛАДКА: ЗАДАЧИ */}
         {activeTab === 'matrix' && (
