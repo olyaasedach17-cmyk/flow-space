@@ -27,12 +27,12 @@ import {
   Send, 
   Trash2, 
   Settings, 
-  Globe,
-  Clock,
-  ArrowRight,
-  X,
-  CheckCircle2
-  LogOut
+  Globe, 
+  Clock, 
+  ArrowRight, 
+  X, 
+  CheckCircle2, 
+  LogOut 
 } from 'lucide-react';
 
 // ==========================================
