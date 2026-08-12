@@ -38,7 +38,8 @@ import {
   Award,
   Mic,
   BookOpen,
-  Copy
+  Copy,
+  MessageCircle
 } from 'lucide-react';
 
 // ==========================================
@@ -224,8 +225,9 @@ export default function App() {
   // Фильтр по сотрудникам
   const [assigneeFilter, setAssigneeFilter] = useState('all');
 
-  // Промокод
+  // Промокод и Телеграм
   const [promoInput, setPromoInput] = useState('');
+  const [tgChatId, setTgChatId] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -277,12 +279,13 @@ export default function App() {
         const data = docSnap.data();
         setDocData(data);
         if (data.settings?.teamSize) setOnboardTeam(data.settings.teamSize);
+        if (data.settings?.telegramChatId) setTgChatId(data.settings.telegramChatId);
       } else {
         setDoc(docRef, {
           email: user.email.toLowerCase(),
           isPro: false,
           appliedPromo: null,
-          settings: { isTeamMode: false, teamSize: '👤 Я один' },
+          settings: { isTeamMode: false, teamSize: '👤 Я один', telegramChatId: '' },
           assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель', role: 'manager' }],
           workspaces: { 'manager': { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } }
         });
@@ -290,6 +293,21 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // 🔥 ИНТЕГРАЦИЯ С ТЕЛЕГРАМ
+  const notifyTelegram = async (message) => {
+    const chatId = docData?.settings?.telegramChatId;
+    if (!chatId) return; // Если ID не указан, просто игнорируем
+    try {
+      await fetch('/api/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message })
+      });
+    } catch (error) {
+      console.error('Ошибка отправки в Telegram:', error);
+    }
+  };
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -400,7 +418,7 @@ export default function App() {
     toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
   };
 
-  // 🔥 ГОЛОСОВОЙ ВВОД (Voice-to-Task)
+  // 🔥 ГОЛОСОВОЙ ВВОД (Voice-to-Task) + Telegram Уведомление
   const toggleVoiceInput = () => {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -454,6 +472,10 @@ export default function App() {
 
         updateWorkspace({ tasks: [...newTasks, ...tasks] });
         toast.success(`Успешно создано задач: ${newTasks.length}`);
+        
+        // Отправляем уведомление в ТГ
+        notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
+
       } catch (err) {
         toast.error('Не удалось разобрать голос: ' + err.message);
       }
@@ -672,21 +694,30 @@ export default function App() {
     } else {
       updateWorkspace({ tasks: [taskObj, ...tasks] });
       toast.success('Новая задача создана');
+      
+      // Отправляем уведомление в ТГ
+      notifyTelegram(`📝 Новая задача: ${newTaskTitle}\nПриоритет: ${newUrgent ? 'Срочно' : 'Обычный'}`);
     }
 
     closeModal();
   };
 
   const handleQuickMove = (taskId, newStatus) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (newStatus === 'review') {
+      notifyTelegram(`👀 Задача на проверке:\n«${task.text}»\nИсполнитель: ${task.assigneeName || 'Владелец'}`);
+    } else if (newStatus === 'done') {
+      notifyTelegram(`✅ Задача выполнена:\n«${task.text}»`);
+    }
+
     if (newStatus === 'done') {
-      const taskToArchive = tasks.find(t => t.id === taskId);
-      if (taskToArchive) {
-        updateWorkspace({
-          tasks: tasks.filter(t => t.id !== taskId),
-          archive: [{ ...taskToArchive, status: 'done' }, ...archive]
-        });
-        toast.success('Задача перенесена в Архив');
-      }
+      updateWorkspace({
+        tasks: tasks.filter(t => t.id !== taskId),
+        archive: [{ ...task, status: 'done' }, ...archive]
+      });
+      toast.success('Задача перенесена в Архив');
     } else {
       updateWorkspace({
         tasks: tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t)
@@ -729,7 +760,7 @@ export default function App() {
   const handleSaveSettings = async () => {
     const isTeam = onboardTeam !== '👤 Я один';
     await setDoc(doc(db, 'users', user.uid), {
-      settings: { isTeamMode: isTeam, teamSize: onboardTeam }
+      settings: { ...docData?.settings, isTeamMode: isTeam, teamSize: onboardTeam, telegramChatId: tgChatId }
     }, { merge: true });
     setShowOnboarding(false);
     toast.success('Настройки сохранены');
@@ -1305,6 +1336,21 @@ export default function App() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* БЛОК TELEGRAM УВЕДОМЛЕНИЙ */}
+            <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
+              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
+                <MessageCircle className="w-3 h-3 text-blue-500" /> Telegram Уведомления
+              </label>
+              <input 
+                type="text" 
+                value={tgChatId} 
+                onChange={(e) => setTgChatId(e.target.value)} 
+                placeholder="Ваш Telegram Chat ID" 
+                className={`w-full p-3 rounded-xl outline-none border text-xs font-semibold ${inputBg}`} 
+              />
+              <p className="text-[9px] text-slate-400 mt-1">Вставьте ваш Chat ID для получения уведомлений от бота.</p>
             </div>
 
             <button onClick={handleSaveSettings} className="w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20">
