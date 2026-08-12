@@ -43,7 +43,7 @@ const aiOptions = [
   { id: 'sheets', icon: '📊', label: 'Архитектор процессов' }
 ];
 
-// Вспомогательный метод безопасного вызова бэкенд ИИ
+// Вспомогательный метод безопасного вызова бэкенд ИИ через Vercel API
 async function callServerAI(endpointData) {
   const response = await fetch('/api/ai', {
     method: 'POST',
@@ -72,7 +72,7 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
   return (
     <div 
       onClick={() => onSelectTask(task)}
-      className={`p-4 rounded-2xl border transition-all shadow-sm cursor-pointer hover:border-indigo-500/50 active:scale-[0.99] ${cardBase}`}
+      className={`p-4 rounded-2xl border transition-all shadow-sm cursor-pointer hover:border-emerald-500/50 active:scale-[0.99] ${cardBase}`}
     >
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-start gap-2">
@@ -94,7 +94,7 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
 
         {/* Индикатор исполнителя только в командном режиме */}
         {isTeamMode && task.assigneeName && (
-          <div className="text-[10px] text-indigo-400 font-medium mt-1">
+          <div className="text-[10px] text-emerald-400 font-medium mt-1">
             👤 {task.assigneeName}
           </div>
         )}
@@ -162,7 +162,6 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
 
-  const [role, setRole] = useState('manager');
   const [docData, setDocData] = useState(null);
   const [currentAssistantId, setCurrentAssistantId] = useState('manager');
 
@@ -193,10 +192,12 @@ export default function App() {
   const [followUpText, setFollowUpText] = useState('');
   const [isProcessGenerating, setIsProcessGenerating] = useState(false);
 
-  // Команда и настройки
+  // Команда и приглашения
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePosition, setInvitePosition] = useState('');
+  const [inviteRole, setInviteRole] = useState('worker');
+
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardTeam, setOnboardTeam] = useState('👤 Я один');
 
@@ -226,7 +227,7 @@ export default function App() {
         setDoc(docRef, {
           email: user.email.toLowerCase(),
           settings: { isTeamMode: false, teamSize: '👤 Я один' },
-          assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель' }],
+          assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель', role: 'manager' }],
           workspaces: { 'manager': { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } }
         });
       }
@@ -244,11 +245,28 @@ export default function App() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      alert('Ошибка входа через Google: ' + error.message);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email) return alert('Пожалуйста, введите ваш Email в поле выше.');
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert('Письмо для сброса пароля отправлено! Проверьте вашу почту.');
+    } catch (error) {
+      alert('Ошибка сброса пароля: ' + error.message);
+    }
+  };
+
   const currentWorkspace = docData?.workspaces?.[currentAssistantId] || {};
   const tasks = currentWorkspace.tasks || [];
   const archive = currentWorkspace.archive || [];
   const kpis = currentWorkspace.kpis || defaultKpis;
-  const savedTime = currentWorkspace.savedTime || 0;
   const assistants = docData?.assistants || [];
   
   // Автоматический флаг режима на основе выбора пользователя
@@ -263,6 +281,33 @@ export default function App() {
     setDoc(doc(db, 'users', user.uid), {
       workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } }
     }, { merge: true });
+  };
+
+  // --- Функция приглашения сотрудника ---
+  const handleInviteColleague = async (e) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    const newAssistantId = `emp_${Date.now()}`;
+    const newAssistantName = inviteEmail.split('@')[0];
+    
+    await setDoc(doc(db, 'users', user.uid), {
+      assistants: [...assistants, { 
+        id: newAssistantId, 
+        name: newAssistantName, 
+        email: inviteEmail, 
+        role: inviteRole,
+        position: invitePosition || 'Сотрудник'
+      }],
+      workspaces: { 
+        ...docData.workspaces, 
+        [newAssistantId]: { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } 
+      }
+    }, { merge: true });
+    
+    setIsInviteOpen(false); 
+    setInviteEmail(''); 
+    setInvitePosition('');
+    alert(`Сотрудник ${inviteEmail} успешно добавлен в систему!`);
   };
 
   // --- ИИ-Функция: Умный Агент ---
@@ -496,16 +541,32 @@ export default function App() {
     <div className={`min-h-screen flex items-center justify-center p-4 font-sans ${themeBg}`}>
       <div className={`p-8 rounded-[32px] max-w-md w-full border ${cardBg}`}>
         <h1 className={`text-2xl font-black text-center mb-6 tracking-tight ${textMain}`}>Flow Space</h1>
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={handleAuth} className="space-y-3">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border ${inputBg}`} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border ${inputBg}`} />
-          <button type="submit" className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-transform active:scale-95">
+          <button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-transform active:scale-95 shadow-lg shadow-emerald-600/20">
             {isLogin ? 'Войти в систему' : 'Зарегистрироваться'}
           </button>
         </form>
-        <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-xs font-semibold text-slate-400 mt-4">
-          {isLogin ? 'Создать новый аккаунт' : 'Уже есть аккаунт? Войти'}
+
+        <button 
+          type="button" 
+          onClick={signInWithGoogle} 
+          className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-[#0E1116] border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}
+        >
+          <span>🌐</span> Войти через Google
         </button>
+
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-xs font-semibold text-slate-400 hover:underline">
+            {isLogin ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти'}
+          </button>
+          {isLogin && (
+            <button type="button" onClick={handleResetPassword} className="text-xs font-semibold text-slate-400 hover:text-slate-200">
+              Забыли пароль?
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -516,23 +577,26 @@ export default function App() {
       {/* ДЕСКТОПНОЕ МЕНЮ */}
       <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-2 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200'}`}>
         <div className="flex items-center gap-3 mb-6 px-2">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-sm">FS</div>
+          <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-md">FS</div>
           <h1 className={`text-lg font-black tracking-tight ${textMain}`}>Flow Space</h1>
         </div>
 
-        <button onClick={() => openTaskModal()} className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm mb-4 shadow-lg shadow-indigo-500/20 active:scale-95 transition-all">
+        <button onClick={() => openTaskModal()} className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm mb-4 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
           + Создать задачу
         </button>
 
-        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'matrix' ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-400'}`}>📋 Задачи</button>
-        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'processes' ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-400'}`}>🤖 Ассистент</button>
+        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'matrix' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>📋 Задачи</button>
+        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'processes' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>🤖 Ассистент</button>
         
-        {/* АНАЛИТИКА ПОКАЗЫВАЕТСЯ ТОЛЬКО ДЛЯ КОМАНДЫ */}
+        {/* КОМАНДА И АНАЛИТИКА — ТОЛЬКО В КОМАНДНОМ РЕЖИМЕ */}
         {isTeamMode && (
-          <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'kpi' ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-400'}`}>📊 Сводка SLA</button>
+          <>
+            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'team' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>👥 Команда</button>
+            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'kpi' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>📊 Сводка SLA</button>
+          </>
         )}
 
-        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'archive' ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-400'}`}>📂 Архив</button>
+        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm ${activeTab === 'archive' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400'}`}>📂 Архив</button>
 
         <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-2">
           <button onClick={() => setShowOnboarding(true)} className="text-xs font-bold text-slate-400 px-2 hover:text-slate-200">⚙️ Режим: {isTeamMode ? 'Команда' : 'Соло'}</button>
@@ -543,18 +607,22 @@ export default function App() {
       {/* МОБИЛЬНАЯ НАВИГАЦИЯ */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-40">
         <div className={`flex justify-around items-center px-4 py-3 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/90 border-white/10' : 'bg-white/90 border-slate-200'}`}>
-          <button onClick={() => setActiveTab('matrix')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'matrix' ? 'text-indigo-500' : 'text-slate-400'}`}>📋 <span>Задачи</span></button>
-          <button onClick={() => setActiveTab('processes')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'processes' ? 'text-indigo-500' : 'text-slate-400'}`}>🤖 <span>Ассистент</span></button>
+          <button onClick={() => setActiveTab('matrix')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'matrix' ? 'text-emerald-500' : 'text-slate-400'}`}>📋 <span>Задачи</span></button>
+          <button onClick={() => setActiveTab('processes')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'processes' ? 'text-emerald-500' : 'text-slate-400'}`}>🤖 <span>Ассистент</span></button>
           
-          <button onClick={() => openTaskModal()} className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-xl shadow-lg shadow-indigo-500/30 active:scale-90 transition-transform">
+          <button onClick={() => openTaskModal()} className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-600/30 active:scale-90 transition-transform">
             +
           </button>
 
-          {isTeamMode && (
-            <button onClick={() => setActiveTab('kpi')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'kpi' ? 'text-indigo-500' : 'text-slate-400'}`}>📊 <span>Сводка</span></button>
+          {isTeamMode ? (
+            <button onClick={() => setActiveTab('team')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'team' ? 'text-emerald-500' : 'text-slate-400'}`}>👥 <span>Команда</span></button>
+          ) : (
+            <button onClick={() => setActiveTab('archive')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'archive' ? 'text-emerald-500' : 'text-slate-400'}`}>📂 <span>Архив</span></button>
           )}
 
-          <button onClick={() => setActiveTab('archive')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'archive' ? 'text-indigo-500' : 'text-slate-400'}`}>📂 <span>Архив</span></button>
+          {isTeamMode && (
+            <button onClick={() => setActiveTab('kpi')} className={`text-xs font-bold flex flex-col items-center ${activeTab === 'kpi' ? 'text-emerald-500' : 'text-slate-400'}`}>📊 <span>Сводка</span></button>
+          )}
         </div>
       </div>
 
@@ -577,12 +645,12 @@ export default function App() {
         {/* ВКЛАДКА: ЗАДАЧИ */}
         {activeTab === 'matrix' && (
           <div className="space-y-6">
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-indigo-50/50 border-indigo-100'}`}>
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-emerald-50/50 border-emerald-100'}`}>
               <div>
-                <h3 className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-indigo-400' : 'text-indigo-900'}`}>Умный Агент</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляем подробный план.</p>
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-emerald-400' : 'text-emerald-900'}`}>Умный Агент</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляет подробный план.</p>
               </div>
-              <button onClick={handleRunAIAgent} disabled={isAgentRunning} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50">
+              <button onClick={handleRunAIAgent} disabled={isAgentRunning} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-md shadow-emerald-600/20">
                 {isAgentRunning ? 'Запуск...' : 'Запустить Агента'}
               </button>
             </div>
@@ -612,7 +680,7 @@ export default function App() {
                   <button 
                     key={opt.id} 
                     onClick={() => setProcessRole(opt.id)}
-                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400' : 'border-slate-200 dark:border-white/5 opacity-70'}`}
+                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-slate-200 dark:border-white/5 opacity-70'}`}
                   >
                     <div className="text-lg mb-1">{opt.icon}</div>
                     {opt.label}
@@ -630,7 +698,7 @@ export default function App() {
               <button 
                 onClick={handleGenerateProcess} 
                 disabled={isProcessGenerating || !processTopic.trim()} 
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-transform active:scale-95 disabled:opacity-50"
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-transform active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-600/20"
               >
                 {isProcessGenerating ? 'Обработка запроса...' : 'Отправить запрос'}
               </button>
@@ -640,7 +708,7 @@ export default function App() {
             {processMessages.length > 0 && (
               <div className="space-y-4">
                 {processMessages.map((msg, idx) => (
-                  <div key={idx} className={`p-5 rounded-2xl border text-sm ${msg.role === 'user' ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-300 ml-6' : `${cardBg} mr-6`}`}>
+                  <div key={idx} className={`p-5 rounded-2xl border text-sm ${msg.role === 'user' ? 'bg-emerald-600/10 border-emerald-500/20 text-emerald-300 ml-6' : `${cardBg} mr-6`}`}>
                     <div className="font-bold text-xs mb-2 opacity-60">{msg.role === 'user' ? '👤 Ваш запрос' : '🤖 Ответ Ассистента'}</div>
                     <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
                   </div>
@@ -655,12 +723,51 @@ export default function App() {
                     placeholder="Уточнить или попросить переделать..." 
                     className="flex-1 bg-transparent outline-none text-xs font-medium" 
                   />
-                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className="px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs">
+                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className="px-4 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-xs">
                     Отправить
                   </button>
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ВКЛАДКА: КОМАНДА И ДОСТУПЫ (ТОЛЬКО В КОМАНДНОМ РЕЖИМЕ) */}
+        {activeTab === 'team' && isTeamMode && (
+          <div className="space-y-6 max-w-4xl mx-auto">
+            <div className={`p-6 rounded-3xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardBg}`}>
+              <div>
+                <h3 className={`text-base font-bold ${textMain}`}>Команда и доступы</h3>
+                <p className="text-xs text-slate-400 mt-1">Управление составом команды и ролями пользователей.</p>
+              </div>
+              <button 
+                onClick={() => setIsInviteOpen(true)} 
+                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+              >
+                + Пригласить сотрудника
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {assistants.map(ast => (
+                <div key={ast.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-sm">
+                      {ast.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className={`font-bold text-sm ${textMain}`}>{ast.name} {ast.id === 'manager' && '👑'}</h4>
+                      <p className="text-xs text-slate-400">
+                        {ast.position ? `${ast.position} • ` : ''}{ast.email || 'Владелец аккаунта'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-slate-500/10 text-slate-400">
+                    {ast.role === 'manager' || ast.id === 'manager' ? 'Руководитель' : 'Исполнитель'}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -672,7 +779,7 @@ export default function App() {
                 <h3 className={`text-base font-bold ${textMain}`}>Сводка для руководителя</h3>
                 <p className="text-xs text-slate-400 mt-1">Автоматический ИИ-анализ эффективности и рисков компании.</p>
               </div>
-              <button onClick={handleGenerateTeamReport} disabled={isGeneratingReport} className="px-5 py-3 bg-indigo-600 text-white font-bold text-xs rounded-2xl">
+              <button onClick={handleGenerateTeamReport} disabled={isGeneratingReport} className="px-5 py-3 bg-emerald-600 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20">
                 {isGeneratingReport ? 'Анализ...' : 'Сформировать отчет'}
               </button>
             </div>
@@ -709,7 +816,7 @@ export default function App() {
               archive.map(task => (
                 <div key={task.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
                   <span className="text-sm font-semibold line-through text-slate-400">{task.text}</span>
-                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-indigo-400">Восстановить</button>
+                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-emerald-400">Восстановить</button>
                 </div>
               ))
             )}
@@ -767,7 +874,7 @@ export default function App() {
                 </div>
               )}
 
-              <button type="submit" className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-2xl">
+              <button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20">
                 Сохранить задачу
               </button>
 
@@ -776,6 +883,38 @@ export default function App() {
                   Удалить задачу
                 </button>
               )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛЬНОЕ ОКНО ПРИГЛАШЕНИЯ СОТРУДНИКА */}
+      {isInviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-sm rounded-3xl p-6 border shadow-2xl ${cardBg}`}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className={`text-base font-bold ${textMain}`}>Пригласить сотрудника</h3>
+              <button onClick={() => setIsInviteOpen(false)} className="text-slate-400 font-bold">✕</button>
+            </div>
+            <form onSubmit={handleInviteColleague} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Email сотрудника</label>
+                <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="colleague@company.com" required className={`w-full p-3.5 rounded-xl outline-none border text-xs ${inputBg}`} autoFocus />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Должность</label>
+                <input type="text" value={invitePosition} onChange={(e) => setInvitePosition(e.target.value)} placeholder="Например: Дизайнер, Копирайтер" className={`w-full p-3.5 rounded-xl outline-none border text-xs ${inputBg}`} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Роль</label>
+                <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} className={`w-full p-3.5 rounded-xl outline-none border text-xs ${inputBg}`}>
+                  <option value="worker">Исполнитель (Свои задачи)</option>
+                  <option value="manager">Руководитель (Полный доступ)</option>
+                </select>
+              </div>
+              <button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20">
+                Отправить приглашение
+              </button>
             </form>
           </div>
         </div>
@@ -793,14 +932,16 @@ export default function App() {
                 <button 
                   key={size} 
                   onClick={() => setOnboardTeam(size)}
-                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left ${onboardTeam === size ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400' : 'border-slate-200 dark:border-white/10'}`}
+                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left ${onboardTeam === size ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-slate-200 dark:border-white/10'}`}
                 >
                   {size}
                 </button>
               ))}
             </div>
 
-            <button onClick={handleSaveSettings} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold">Сохранить</button>
+            <button onClick={handleSaveSettings} className="w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20">
+              Сохранить
+            </button>
           </div>
         </div>
       )}
