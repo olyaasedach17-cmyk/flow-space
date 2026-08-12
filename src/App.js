@@ -807,7 +807,8 @@ export default function App() {
   );
 
   return (
-    <div className={`min-h-screen font-sans pb-28 md:pb-8 md:pl-64 ${themeBg}`}>
+   {/* Увеличен pb-36 для мобильных устройств, чтобы нижнее меню не перекрывало задачи */}
+<div className={`min-h-screen font-sans pb-36 md:pb-8 md:pl-64 ${themeBg}`}>
       <Toaster position="top-center" richColors />
       
       {/* ДЕСКТОПНОЕ МЕНЮ */}
@@ -869,35 +870,35 @@ export default function App() {
         </div>
       </nav>
 
-      {/* МОБИЛЬНАЯ НАВИГАЦИЯ */}
-      <div className="md:hidden fixed bottom-4 left-4 right-4 z-40">
-        <div className={`flex justify-around items-center px-4 py-3 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/90 border-white/10' : 'bg-white/90 border-slate-200'}`}>
-          <button onClick={() => setActiveTab('matrix')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'matrix' ? 'text-emerald-500' : 'text-slate-400'}`}>
-            <LayoutDashboard className="w-4 h-4" /> <span>Задачи</span>
-          </button>
-          <button onClick={() => setActiveTab('processes')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'processes' ? 'text-emerald-500' : 'text-slate-400'}`}>
-            <Bot className="w-4 h-4" /> <span>Ассистент</span>
-          </button>
-          
-          <button onClick={toggleVoiceInput} className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl shadow-lg active:scale-90 transition-transform ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/40' : 'bg-emerald-600 text-white shadow-emerald-600/30'}`}>
-            <Mic className="w-5 h-5" />
-          </button>
+      {/* МОБИЛЬНАЯ НАВИГАЦИЯ (Исправленная) */}
+<div className="md:hidden fixed bottom-4 left-2 right-2 z-40">
+  <div className={`flex justify-around items-center px-2 py-3.5 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/85 border-white/10' : 'bg-white/85 border-slate-200 shadow-slate-200/50'}`}>
+    <button onClick={() => setActiveTab('matrix')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'matrix' ? 'text-emerald-600' : 'text-slate-400'}`}>
+      <LayoutDashboard className="w-5 h-5" /> <span>Задачи</span>
+    </button>
+    <button onClick={() => setActiveTab('processes')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'processes' ? 'text-emerald-600' : 'text-slate-400'}`}>
+      <Bot className="w-5 h-5" /> <span>Ассистент</span>
+    </button>
+    
+    <button onClick={toggleVoiceInput} className={`w-14 h-14 -mt-6 rounded-full flex items-center justify-center font-bold text-xl shadow-xl active:scale-90 transition-transform ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/40' : 'bg-emerald-600 text-white shadow-emerald-600/40'}`}>
+      <Mic className="w-6 h-6" />
+    </button>
 
-          <button onClick={() => setActiveTab('sops')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'sops' ? 'text-emerald-500' : 'text-slate-400'}`}>
-            <BookOpen className="w-4 h-4" /> <span>SOPs</span>
-          </button>
+    <button onClick={() => setActiveTab('sops')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'sops' ? 'text-emerald-600' : 'text-slate-400'}`}>
+      <BookOpen className="w-5 h-5" /> <span>SOPs</span>
+    </button>
 
-          {isTeamMode ? (
-            <button onClick={() => setActiveTab('team')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'team' ? 'text-emerald-500' : 'text-slate-400'}`}>
-              <Users className="w-4 h-4" /> <span>Команда</span>
-            </button>
-          ) : (
-            <button onClick={() => setActiveTab('archive')} className={`text-xs font-bold flex flex-col items-center gap-1 ${activeTab === 'archive' ? 'text-emerald-500' : 'text-slate-400'}`}>
-              <FolderArchive className="w-4 h-4" /> <span>Архив</span>
-            </button>
-          )}
-        </div>
-      </div>
+    {isTeamMode ? (
+      <button onClick={() => setActiveTab('team')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'team' ? 'text-emerald-600' : 'text-slate-400'}`}>
+        <Users className="w-5 h-5" /> <span>Команда</span>
+      </button>
+    ) : (
+      <button onClick={() => setActiveTab('archive')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'archive' ? 'text-emerald-600' : 'text-slate-400'}`}>
+        <FolderArchive className="w-5 h-5" /> <span>Архив</span>
+      </button>
+    )}
+  </div>
+</div>
 
       {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
