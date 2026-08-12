@@ -45,6 +45,21 @@ import {
 // ==========================================
 // 1. КОНСТАНТЫ И НАСТРОЙКИ
 // ==========================================
+const translations = {
+  ru: {
+    loginTitle: 'Flow Space Enterprise',
+    board: 'Задачи',
+    analytics: 'Аналитика',
+    team: 'Команда',
+    archiveTab: 'Архив',
+    aiProcesses: 'Ассистент',
+    colTodo: 'Нужно сделать',
+    colInProgress: 'В процессе',
+    colReview: 'На проверке',
+    colDeferred: 'Отложено',
+    empty: 'Задач пока нет',
+  }
+};
 const defaultKpis = [
   { id: 1, name: 'Соблюдение сроков (SLA)', weight: 40, max: 100, score: 92, desc: 'Процент задач, закрытых до дедлайна.' },
   { id: 2, name: 'Качество (без возвратов)', weight: 35, max: 100, score: 88, desc: 'Задачи, принятые руководителем с первого раза.' },
@@ -219,11 +234,7 @@ export default function App() {
   const [docData, setDocData] = useState(null);
   const [currentAssistantId, setCurrentAssistantId] = useState('manager');
 
-  const [activeTab, setActiveTab] = useState('matrix');
-  const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
-  const t = (key) => translations['ru'][key] || key;
-
-
+  
   // Голосовой ввод
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
