@@ -32,7 +32,9 @@ import {
   ArrowRight, 
   X, 
   CheckCircle2, 
-  LogOut 
+  LogOut,
+  Filter,
+  Briefcase
 } from 'lucide-react';
 
 // ==========================================
@@ -61,11 +63,11 @@ const defaultKpis = [
 ];
 
 const aiOptions = [
-  { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Тексты, посты)' },
-  { id: 'analyst', icon: '🕵️', label: 'Аналитик (Маркетинг, идеи)' },
+  { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Посты, статьи)' },
+  { id: 'smm', icon: '📲', label: 'SMM / Маркетолог (Контент, идей)' },
+  { id: 'sales', icon: '💼', label: 'Менеджер по продажам (Скрипты)' },
   { id: 'consultant', icon: '🧠', label: 'Консультант (Стратегия)' },
-  { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' },
-  { id: 'sheets', icon: '📊', label: 'Архитектор процессов' }
+  { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' }
 ];
 
 async function callServerAI(endpointData) {
@@ -211,6 +213,9 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
+  // Фильтр по сотрудникам
+  const [assigneeFilter, setAssigneeFilter] = useState('all');
+
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskHours, setNewTaskHours] = useState('');
@@ -312,10 +317,15 @@ export default function App() {
   
   const isTeamMode = docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один');
 
-  const todoTasks = tasks.filter(t => t.status === 'todo');
-  const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
-  const reviewTasks = tasks.filter(t => t.status === 'review');
-  const deferredTasks = tasks.filter(t => t.status === 'deferred');
+  // Фильтрация задач на доске
+  const filteredTasks = assigneeFilter === 'all' 
+    ? tasks 
+    : tasks.filter(t => t.assigneeName === assigneeFilter);
+
+  const todoTasks = filteredTasks.filter(t => t.status === 'todo');
+  const inProgressTasks = filteredTasks.filter(t => t.status === 'in_progress');
+  const reviewTasks = filteredTasks.filter(t => t.status === 'review');
+  const deferredTasks = filteredTasks.filter(t => t.status === 'deferred');
 
   const updateWorkspace = (newData) => {
     setDoc(doc(db, 'users', user.uid), {
@@ -362,7 +372,7 @@ export default function App() {
       const response = await callServerAI({
         model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: prompt }],
-        temperature: 0.3
+        temperature: 0.1
       });
 
       let rawContent = response.choices[0].message.content.trim();
@@ -394,7 +404,7 @@ export default function App() {
       const data = await callServerAI({
         model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: prompt }],
-        temperature: 0.5
+        temperature: 0.4
       });
       setTeamReport(data.choices[0].message.content.trim());
       toast.success('Отчет сформирован');
@@ -418,7 +428,8 @@ export default function App() {
         messages: [
           { role: 'system', content: prompt },
           { role: 'user', content: newTaskTitle }
-        ]
+        ],
+        temperature: 0.3
       });
       setNewTaskDesc(data.choices[0].message.content.trim());
       toast.success('Текст сформирован');
@@ -486,6 +497,19 @@ export default function App() {
     } finally {
       setIsProcessGenerating(false);
     }
+  };
+
+  // Создание задачи из ответа ИИ
+  const handleCreateTaskFromAI = (content) => {
+    setSelectedTask(null);
+    setNewTaskTitle(content.slice(0, 45) + '...');
+    setNewTaskDesc(content);
+    setNewTaskHours('1');
+    setNewTaskDueDate('');
+    setNewUrgent(false);
+    setNewImportant(false);
+    setIsCreateOpen(true);
+    toast.success('Заполнены данные для создания задачи');
   };
 
   const handleSaveTask = (e) => {
@@ -722,6 +746,33 @@ export default function App() {
               </button>
             </div>
 
+            {/* ФИЛЬТР ПО СОТРУДНИКАМ */}
+            {isTeamMode && assistants.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                  <Filter className="w-3 h-3" /> Фильтр:
+                </span>
+                <button 
+                  onClick={() => setAssigneeFilter('all')} 
+                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === 'all' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}
+                >
+                  Все ({tasks.length})
+                </button>
+                {assistants.map(ast => {
+                  const count = tasks.filter(t => t.assigneeName === ast.name).length;
+                  return (
+                    <button 
+                      key={ast.id} 
+                      onClick={() => setAssigneeFilter(ast.name)} 
+                      className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === ast.name ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}
+                    >
+                      {ast.name} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className={`grid grid-cols-1 ${isTeamMode ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
               <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
               <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
@@ -779,6 +830,15 @@ export default function App() {
                       {msg.role === 'user' ? 'Ваш запрос' : 'Ответ Ассистента'}
                     </div>
                     <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+
+                    {msg.role === 'assistant' && (
+                      <button 
+                        onClick={() => handleCreateTaskFromAI(msg.content)} 
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors flex items-center gap-1.5 mt-4"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Создать задачу из этого ответа
+                      </button>
+                    )}
                   </div>
                 ))}
 
@@ -817,26 +877,34 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              {assistants.map(ast => (
-                <div key={ast.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-sm">
-                      {ast.name.charAt(0).toUpperCase()}
+              {assistants.map(ast => {
+                const activeTasksCount = tasks.filter(t => t.assigneeName === ast.name && t.status !== 'done').length;
+                const totalHours = tasks.filter(t => t.assigneeName === ast.name && t.status !== 'done').reduce((acc, curr) => acc + (parseFloat(curr.estimatedHours) || 0), 0);
+
+                return (
+                  <div key={ast.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-sm">
+                        {ast.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className={`font-bold text-sm flex items-center gap-1.5 ${textMain}`}>
+                          {ast.name} {ast.id === 'manager' && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          {ast.position ? `${ast.position} • ` : ''}{ast.email || 'Владелец аккаунта'}
+                          <span className="ml-2 font-semibold text-emerald-400">
+                            ({activeTasksCount} задач • {totalHours}ч)
+                          </span>
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className={`font-bold text-sm flex items-center gap-1.5 ${textMain}`}>
-                        {ast.name} {ast.id === 'manager' && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
-                      </h4>
-                      <p className="text-xs text-slate-400">
-                        {ast.position ? `${ast.position} • ` : ''}{ast.email || 'Владелец аккаунта'}
-                      </p>
-                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-slate-500/10 text-slate-400">
+                      {ast.role === 'manager' || ast.id === 'manager' ? 'Руководитель' : 'Исполнитель'}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-slate-500/10 text-slate-400">
-                    {ast.role === 'manager' || ast.id === 'manager' ? 'Руководитель' : 'Исполнитель'}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
