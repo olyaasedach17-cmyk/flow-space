@@ -297,7 +297,7 @@ export default function App() {
   // 🔥 ИНТЕГРАЦИЯ С ТЕЛЕГРАМ
   const notifyTelegram = async (message) => {
     const chatId = docData?.settings?.telegramChatId;
-    if (!chatId) return; // Если ID не указан, просто игнорируем
+    if (!chatId) return; 
     try {
       await fetch('/api/telegram', {
         method: 'POST',
@@ -353,7 +353,6 @@ export default function App() {
   const isPro = docData?.isPro || !!docData?.appliedPromo;
   const isTeamMode = docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один');
 
-  // Применение промокода
   const handleApplyPromo = async () => {
     if (!promoInput.trim()) return toast.error('Введите промокод');
     const code = promoInput.toUpperCase().trim();
@@ -418,7 +417,6 @@ export default function App() {
     toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
   };
 
-  // 🔥 ГОЛОСОВОЙ ВВОД (Voice-to-Task) + Telegram Уведомление
   const toggleVoiceInput = () => {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -473,7 +471,6 @@ export default function App() {
         updateWorkspace({ tasks: [...newTasks, ...tasks] });
         toast.success(`Успешно создано задач: ${newTasks.length}`);
         
-        // Отправляем уведомление в ТГ
         notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
 
       } catch (err) {
@@ -630,7 +627,6 @@ export default function App() {
     }
   };
 
-  // 🔥 СОХРАНЕНИЕ РЕГЛАМЕНТА (SOP)
   const handleSaveToSOP = async (content) => {
     toast.info('Генерация названия для регламента...');
     try {
@@ -694,8 +690,6 @@ export default function App() {
     } else {
       updateWorkspace({ tasks: [taskObj, ...tasks] });
       toast.success('Новая задача создана');
-      
-      // Отправляем уведомление в ТГ
       notifyTelegram(`📝 Новая задача: ${newTaskTitle}\nПриоритет: ${newUrgent ? 'Срочно' : 'Обычный'}`);
     }
 
@@ -807,8 +801,7 @@ export default function App() {
   );
 
   return (
-   {/* Увеличен pb-36 для мобильных устройств, чтобы нижнее меню не перекрывало задачи */}
-<div className={`min-h-screen font-sans pb-36 md:pb-8 md:pl-64 ${themeBg}`}>
+    <div className={`min-h-screen font-sans pb-36 md:pb-8 md:pl-64 ${themeBg}`}>
       <Toaster position="top-center" richColors />
       
       {/* ДЕСКТОПНОЕ МЕНЮ */}
@@ -825,7 +818,6 @@ export default function App() {
           )}
         </div>
 
-        {/* КНОПКИ СОЗДАНИЯ И ГОЛОСОВОГО ВВОДА */}
         <div className="flex gap-2 mb-4">
           <button onClick={() => openTaskModal()} className="flex-1 flex items-center justify-center gap-2 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
             <Plus className="w-4 h-4" /> Задача
@@ -870,7 +862,35 @@ export default function App() {
         </div>
       </nav>
 
-      
+      {/* МОБИЛЬНАЯ НАВИГАЦИЯ */}
+      <div className="md:hidden fixed bottom-4 left-2 right-2 z-40">
+        <div className={`flex justify-around items-center px-2 py-3.5 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/85 border-white/10' : 'bg-white/85 border-slate-200 shadow-slate-200/50'}`}>
+          <button onClick={() => setActiveTab('matrix')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'matrix' ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <LayoutDashboard className="w-5 h-5" /> <span>Задачи</span>
+          </button>
+          <button onClick={() => setActiveTab('processes')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'processes' ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <Bot className="w-5 h-5" /> <span>Ассистент</span>
+          </button>
+          
+          <button onClick={toggleVoiceInput} className={`w-14 h-14 -mt-6 rounded-full flex items-center justify-center font-bold text-xl shadow-xl active:scale-90 transition-transform ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/40' : 'bg-emerald-600 text-white shadow-emerald-600/40'}`}>
+            <Mic className="w-6 h-6" />
+          </button>
+
+          <button onClick={() => setActiveTab('sops')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'sops' ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <BookOpen className="w-5 h-5" /> <span>SOPs</span>
+          </button>
+
+          {isTeamMode ? (
+            <button onClick={() => setActiveTab('team')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'team' ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <Users className="w-5 h-5" /> <span>Команда</span>
+            </button>
+          ) : (
+            <button onClick={() => setActiveTab('archive')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'archive' ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <FolderArchive className="w-5 h-5" /> <span>Архив</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
@@ -883,7 +903,6 @@ export default function App() {
             <p className="text-xs text-slate-400 mt-0.5">{isTeamMode ? 'Управление процессами' : 'Фокус на личных задачах'}</p>
           </div>
           <div className="flex items-center gap-2">
-            {/* Кнопка Настроек (для мобильных) */}
             <button onClick={() => setShowOnboarding(true)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform">
               <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             </button>
