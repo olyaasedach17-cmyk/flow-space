@@ -32,6 +32,7 @@ import {
   ArrowRight,
   X,
   CheckCircle2
+  LogOut
 } from 'lucide-react';
 
 // ==========================================
