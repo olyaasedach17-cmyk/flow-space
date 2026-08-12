@@ -45,22 +45,6 @@ import {
 // ==========================================
 // 1. КОНСТАНТЫ И НАСТРОЙКИ
 // ==========================================
-const translations = {
-  ru: {
-    loginTitle: 'Flow Space Enterprise',
-    board: 'Задачи',
-    analytics: 'Аналитика',
-    team: 'Команда',
-    archiveTab: 'Архив',
-    aiProcesses: 'Ассистент',
-    colTodo: 'Нужно сделать',
-    colInProgress: 'В процессе',
-    colReview: 'На проверке',
-    colDeferred: 'Отложено',
-    empty: 'Задач пока нет',
-  }
-};
-
 const defaultKpis = [
   { id: 1, name: 'Соблюдение сроков (SLA)', weight: 40, max: 100, score: 92, desc: 'Процент задач, закрытых до дедлайна.' },
   { id: 2, name: 'Качество (без возвратов)', weight: 35, max: 100, score: 88, desc: 'Задачи, принятые руководителем с первого раза.' },
@@ -69,11 +53,14 @@ const defaultKpis = [
 
 const aiOptions = [
   { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Посты, статьи)' },
-  { id: 'smm', icon: '📲', label: 'SMM / Маркетолог (Контент, идеи)' },
-  { id: 'sales', icon: '💼', label: 'Менеджер по продажам (Скрипты)' },
+  { id: 'smm', icon: '📲', label: 'Маркетолог (Контент, идеи)' },
+  { id: 'sales', icon: '💼', label: 'Продажи (Скрипты)' },
   { id: 'consultant', icon: '🧠', label: 'Консультант (Стратегия)' },
   { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' }
 ];
+
+// Премиальные стили кнопок
+const btnPrimary = "bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 transition-all shadow-md";
 
 async function callServerAI(endpointData) {
   const response = await fetch('/api/ai', {
@@ -90,9 +77,8 @@ async function callServerAI(endpointData) {
 }
 
 // ==========================================
-// 2. ОПТИМИЗИРОВАННЫЕ КОМПОНЕНТЫ UI
+// 2. КАРТОЧКА ЗАДАЧИ
 // ==========================================
-
 function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
   const cardBase = task.urgent 
     ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50/70 border-red-200')
@@ -103,7 +89,7 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
   return (
     <div 
       onClick={() => onSelectTask(task)}
-      className={`p-4 rounded-2xl border transition-all shadow-sm cursor-pointer hover:border-emerald-500/50 active:scale-[0.99] ${cardBase}`}
+      className={`p-4 rounded-2xl border transition-all shadow-sm cursor-pointer hover:border-slate-400/50 active:scale-[0.99] ${cardBase}`}
     >
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-start gap-2">
@@ -118,69 +104,91 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
 
         <div className="flex flex-wrap gap-1.5 items-center mt-1">
           {task.urgent && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-red-500/20 text-red-400 border border-red-500/30">
-              <Flame className="w-3 h-3 text-red-400" /> Срочно
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-red-500/10 text-red-500 border border-red-500/20">
+              <Flame className="w-3 h-3" /> Срочно
             </span>
           )}
           {task.important && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              <Gem className="w-3 h-3 text-blue-400" /> Важно
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+              <Gem className="w-3 h-3" /> Важно
             </span>
           )}
           {task.estimatedHours > 0 && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-400 border border-slate-500/20">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">
               <Clock className="w-3 h-3" /> {task.estimatedHours}ч
             </span>
           )}
           {task.dueDate && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">
               <Calendar className="w-3 h-3" /> {task.dueDate}
             </span>
           )}
         </div>
 
         {isTeamMode && task.assigneeName && (
-          <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium mt-1">
+          <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-1">
             <User className="w-3 h-3" /> {task.assigneeName}
           </div>
         )}
       </div>
 
-      <div className="flex justify-between items-center pt-3 mt-2 border-t border-slate-100 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
+      <div className="flex justify-between items-center pt-3 mt-3 border-t border-slate-100 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-1.5">
           {task.status === 'todo' && (
-            <button onClick={() => onQuickMove(task.id, 'in_progress')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">В работу</button>
+            <button 
+              onClick={() => onQuickMove(task.id, 'in_progress')} 
+              className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20 transition-colors"
+            >
+              В работу
+            </button>
           )}
           {task.status === 'in_progress' && (
             isTeamMode ? (
-              <button onClick={() => onQuickMove(task.id, 'review')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors">На проверку</button>
+              <button 
+                onClick={() => onQuickMove(task.id, 'review')} 
+                className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20 transition-colors"
+              >
+                На проверку
+              </button>
             ) : (
-              <button onClick={() => onQuickMove(task.id, 'done')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Готово ✓</button>
+              <button 
+                onClick={() => onQuickMove(task.id, 'done')} 
+                className={`text-[11px] font-bold px-3 py-1.5 rounded-lg ${btnPrimary}`}
+              >
+                Готово ✓
+              </button>
             )
           )}
           {task.status === 'review' && isTeamMode && (
-            <button onClick={() => onQuickMove(task.id, 'done')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Принять</button>
+            <button 
+              onClick={() => onQuickMove(task.id, 'done')} 
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-lg ${btnPrimary}`}
+            >
+              Принять ✓
+            </button>
           )}
         </div>
-        <span className="text-[10px] text-slate-400 flex items-center gap-0.5">Детали <ArrowRight className="w-2.5 h-2.5" /></span>
+        <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+          Детали <ArrowRight className="w-2.5 h-2.5" />
+        </span>
       </div>
     </div>
   );
 }
 
-function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, t, onSelectTask, onQuickMove }) {
+function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, onSelectTask, onQuickMove }) {
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 mb-3 px-1">
         <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`}></span>
         <h3 className={`font-bold text-xs uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          {title} <span className="text-slate-500 font-normal ml-1">({tasks.length})</span>
+          {title} <span className="text-slate-400 font-normal ml-1">({tasks.length})</span>
         </h3>
       </div>
       <div className="space-y-3 grow">
         {tasks.length === 0 ? (
           <div className={`text-center py-6 rounded-2xl border border-dashed text-xs ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
-            {t('empty')}
+            Задач пока нет
           </div>
         ) : (
           tasks.map(task => (
@@ -213,7 +221,6 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('matrix');
   const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
-  const t = (key) => translations['ru'][key] || key;
 
   // Голосовой ввод
   const [isListening, setIsListening] = useState(false);
@@ -230,6 +237,7 @@ export default function App() {
   const [tgChatId, setTgChatId] = useState('');
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
+  // Состояние новой задачи
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskHours, setNewTaskHours] = useState('');
@@ -254,23 +262,32 @@ export default function App() {
   const [invitePosition, setInvitePosition] = useState('');
   const [inviteRole, setInviteRole] = useState('worker');
 
+  // Настройки
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardTeam, setOnboardTeam] = useState('👤 Я один');
 
   const [teamReport, setTeamReport] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
+  // Сохранение темы
   useEffect(() => {
     localStorage.setItem('flowspace_theme', isDark ? 'dark' : 'light');
-    if (isDark) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, [isDark]);
 
+  // Подписка на пользователя
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
     return () => unsubscribe();
   }, []);
 
+  // Подписка на базу данных
   useEffect(() => {
     if (!user) return;
     const docRef = doc(db, 'users', user.uid);
@@ -353,6 +370,7 @@ export default function App() {
   const isPro = docData?.isPro || !!docData?.appliedPromo;
   const isTeamMode = docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один');
 
+  // Применение промокода
   const handleApplyPromo = async () => {
     if (!promoInput.trim()) return toast.error('Введите промокод');
     const code = promoInput.toUpperCase().trim();
@@ -417,6 +435,7 @@ export default function App() {
     toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
   };
 
+  // 🔥 ГОЛОСОВОЙ ВВОД (Внутри карточки задачи)
   const toggleVoiceInput = () => {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -473,7 +492,7 @@ export default function App() {
         
         notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
         
-        // Закрываем модальное окно, если оно было открыто
+        // Закрываем окно создания после диктовки
         setIsCreateOpen(false);
 
       } catch (err) {
@@ -630,6 +649,7 @@ export default function App() {
     }
   };
 
+  // 🔥 СОХРАНЕНИЕ РЕГЛАМЕНТА (SOP)
   const handleSaveToSOP = async (content) => {
     toast.info('Генерация названия для регламента...');
     try {
@@ -693,6 +713,7 @@ export default function App() {
     } else {
       updateWorkspace({ tasks: [taskObj, ...tasks] });
       toast.success('Новая задача создана');
+      
       notifyTelegram(`📝 Новая задача: ${newTaskTitle}\nПриоритет: ${newUrgent ? 'Срочно' : 'Обычный'}`);
     }
 
@@ -763,6 +784,7 @@ export default function App() {
     toast.success('Настройки сохранены');
   };
 
+  // Цвета темы
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
   const cardBg = isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200';
   const textMain = isDark ? 'text-white' : 'text-slate-900';
@@ -776,7 +798,7 @@ export default function App() {
         <form onSubmit={handleAuth} className="space-y-3">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border ${inputBg}`} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border ${inputBg}`} />
-          <button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-transform active:scale-95 shadow-lg shadow-emerald-600/20">
+          <button type="submit" className={`w-full py-3.5 rounded-2xl font-bold ${btnPrimary}`}>
             {isLogin ? 'Войти в систему' : 'Зарегистрироваться'}
           </button>
         </form>
@@ -784,17 +806,17 @@ export default function App() {
         <button 
           type="button" 
           onClick={signInWithGoogle} 
-          className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-[#0E1116] border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}
+          className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-transparent border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}
         >
-          <Globe className="w-4 h-4 text-emerald-500" /> Войти через Google
+          <Globe className="w-4 h-4 text-slate-900 dark:text-white" /> Войти через Google
         </button>
 
         <div className="mt-6 flex flex-col items-center gap-2">
-          <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-xs font-semibold text-slate-400 hover:underline">
+          <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white">
             {isLogin ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти'}
           </button>
           {isLogin && (
-            <button type="button" onClick={handleResetPassword} className="text-xs font-semibold text-slate-400 hover:text-slate-200">
+            <button type="button" onClick={handleResetPassword} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white">
               Забыли пароль?
             </button>
           )}
@@ -811,86 +833,85 @@ export default function App() {
       <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-2 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200'}`}>
         <div className="flex items-center justify-between mb-6 px-2">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-md">FS</div>
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-black text-sm shadow-md">FS</div>
             <h1 className={`text-lg font-black tracking-tight ${textMain}`}>Flow Space</h1>
           </div>
           {isPro && (
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase">
+            <span className="px-2 py-0.5 rounded bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[9px] font-black uppercase">
               PRO
             </span>
           )}
         </div>
 
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => openTaskModal()} className="flex-1 flex items-center justify-center gap-2 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
-            <Plus className="w-4 h-4" /> Задача
-          </button>
-          <button onClick={toggleVoiceInput} className={`w-11 h-11 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${isListening ? 'bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'}`}>
-            <Mic className="w-5 h-5" />
-          </button>
-        </div>
+        <button onClick={() => openTaskModal()} className={`flex items-center justify-center gap-2 w-full h-11 rounded-xl font-bold text-sm mb-4 ${btnPrimary}`}>
+          <Plus className="w-4 h-4" /> Создать задачу
+        </button>
 
-        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'matrix' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'matrix' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <LayoutDashboard className="w-4 h-4" /> Задачи
         </button>
-        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'processes' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'processes' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <Bot className="w-4 h-4" /> Ассистент
         </button>
-        <button onClick={() => setActiveTab('sops')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'sops' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+        <button onClick={() => setActiveTab('sops')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'sops' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <BookOpen className="w-4 h-4" /> Регламенты
         </button>
         
         {isTeamMode && (
           <>
-            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'team' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'team' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
               <Users className="w-4 h-4" /> Команда
             </button>
-            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'kpi' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'kpi' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
               <BarChart3 className="w-4 h-4" /> Сводка SLA
             </button>
           </>
         )}
 
-        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'archive' ? 'bg-emerald-500/10 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>
+        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'archive' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <FolderArchive className="w-4 h-4" /> Архив
         </button>
 
         <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-2">
-          <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-400 px-2 hover:text-slate-200">
-            <Settings className="w-3.5 h-3.5" /> Настройки {isPro ? '(PRO)' : ''}
+          <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-500 px-2 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+            <Settings className="w-3.5 h-3.5" /> Настройки
           </button>
-          <button onClick={() => signOut(auth)} className="flex items-center gap-2 w-full text-left px-2 py-2 text-xs font-bold text-red-400 hover:underline">
+          <button onClick={() => signOut(auth)} className="flex items-center gap-2 w-full text-left px-2 py-2 text-xs font-bold text-red-500 hover:underline">
             <LogOut className="w-3.5 h-3.5" /> Выйти из аккаунта
           </button>
         </div>
       </nav>
 
-      {/* МОБИЛЬНАЯ НАВИГАЦИЯ */}
-      <div className="md:hidden fixed bottom-4 left-2 right-2 z-40">
-        <div className={`flex justify-around items-center px-2 py-3.5 rounded-3xl shadow-2xl backdrop-blur-xl border ${isDark ? 'bg-[#161B22]/85 border-white/10' : 'bg-white/85 border-slate-200 shadow-slate-200/50'}`}>
-          <button onClick={() => setActiveTab('matrix')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'matrix' ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <LayoutDashboard className="w-5 h-5" /> <span>Задачи</span>
+      {/* ПРЕМИАЛЬНАЯ МОБИЛЬНАЯ НАВИГАЦИЯ (ОСТРОВ) */}
+      <div className="md:hidden fixed bottom-6 left-4 right-4 z-40">
+        <div className={`flex justify-between items-center px-4 py-2.5 rounded-2xl shadow-2xl border ${isDark ? 'bg-[#1C2128]/95 border-white/10 shadow-black/50' : 'bg-white/95 border-slate-200 shadow-slate-300/60 backdrop-blur-md'}`}>
+          <button onClick={() => setActiveTab('matrix')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'matrix' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+            <LayoutDashboard className="w-5 h-5" />
+            <span className="text-[9px] font-bold">Задачи</span>
           </button>
-          <button onClick={() => setActiveTab('processes')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'processes' ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <Bot className="w-5 h-5" /> <span>Ассистент</span>
+          <button onClick={() => setActiveTab('processes')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'processes' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+            <Bot className="w-5 h-5" />
+            <span className="text-[9px] font-bold">ИИ</span>
           </button>
           
-          {/* ТЕПЕРЬ ЗДЕСЬ ПЛЮС ДЛЯ СОЗДАНИЯ ЗАДАЧИ */}
-          <button onClick={() => openTaskModal()} className="w-14 h-14 -mt-6 rounded-full flex items-center justify-center font-bold text-xl shadow-xl active:scale-90 transition-transform bg-emerald-600 text-white shadow-emerald-600/40">
+          <button onClick={() => openTaskModal()} className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl active:scale-95 transition-transform shadow-lg ${isDark ? 'bg-white text-slate-900 shadow-white/10' : 'bg-slate-900 text-white shadow-slate-900/30'}`}>
             <Plus className="w-6 h-6" />
           </button>
 
-          <button onClick={() => setActiveTab('sops')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'sops' ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <BookOpen className="w-5 h-5" /> <span>SOPs</span>
+          <button onClick={() => setActiveTab('sops')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'sops' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+            <BookOpen className="w-5 h-5" />
+            <span className="text-[9px] font-bold">База</span>
           </button>
 
           {isTeamMode ? (
-            <button onClick={() => setActiveTab('team')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'team' ? 'text-emerald-600' : 'text-slate-400'}`}>
-              <Users className="w-5 h-5" /> <span>Команда</span>
+            <button onClick={() => setActiveTab('team')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'team' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+              <Users className="w-5 h-5" />
+              <span className="text-[9px] font-bold">Люди</span>
             </button>
           ) : (
-            <button onClick={() => setActiveTab('archive')} className={`text-[10px] font-bold flex flex-col items-center gap-1.5 ${activeTab === 'archive' ? 'text-emerald-600' : 'text-slate-400'}`}>
-              <FolderArchive className="w-5 h-5" /> <span>Архив</span>
+            <button onClick={() => setActiveTab('archive')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'archive' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+              <FolderArchive className="w-5 h-5" />
+              <span className="text-[9px] font-bold">Архив</span>
             </button>
           )}
         </div>
@@ -911,7 +932,7 @@ export default function App() {
               <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             </button>
             <button onClick={() => setIsDark(!isDark)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform">
-              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+              {isDark ? <Sun className="w-4 h-4 text-slate-200" /> : <Moon className="w-4 h-4 text-slate-700" />}
             </button>
           </div>
         </header>
@@ -920,24 +941,24 @@ export default function App() {
         <div className="md:hidden flex items-center gap-2 overflow-x-auto pb-4 mb-2" style={{ scrollbarWidth: 'none' }}>
           {isTeamMode && (
             <>
-              <button onClick={() => setActiveTab('team')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'team' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>👥 Команда</button>
-              <button onClick={() => setActiveTab('kpi')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'kpi' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>📊 Сводка SLA</button>
+              <button onClick={() => setActiveTab('team')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'team' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400'}`}>👥 Команда</button>
+              <button onClick={() => setActiveTab('kpi')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'kpi' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400'}`}>📊 Сводка SLA</button>
             </>
           )}
-          <button onClick={() => setActiveTab('archive')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'archive' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>📦 Архив задач</button>
+          <button onClick={() => setActiveTab('archive')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'archive' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400'}`}>📦 Архив задач</button>
         </div>
 
         {/* ВКЛАДКА: ЗАДАЧИ */}
         {activeTab === 'matrix' && (
           <div className="space-y-6">
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-emerald-50/50 border-emerald-100'}`}>
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
               <div>
-                <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-emerald-400' : 'text-emerald-900'}`}>
+                <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
                   <Sparkles className="w-3.5 h-3.5" /> Умный Агент
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляет подробный план.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляет ТЗ.</p>
               </div>
-              <button onClick={handleRunAIAgent} disabled={isAgentRunning} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-md shadow-emerald-600/20">
+              <button onClick={handleRunAIAgent} disabled={isAgentRunning} className={`px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50 ${btnPrimary}`}>
                 {isAgentRunning ? 'Запуск...' : 'Запустить Агента'}
               </button>
             </div>
@@ -950,7 +971,7 @@ export default function App() {
                 </span>
                 <button 
                   onClick={() => setAssigneeFilter('all')} 
-                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === 'all' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === 'all' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
                 >
                   Все ({tasks.length})
                 </button>
@@ -960,7 +981,7 @@ export default function App() {
                     <button 
                       key={ast.id} 
                       onClick={() => setAssigneeFilter(ast.name)} 
-                      className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === ast.name ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === ast.name ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
                     >
                       {ast.name} ({count})
                     </button>
@@ -992,7 +1013,7 @@ export default function App() {
                   <button 
                     key={opt.id} 
                     onClick={() => setProcessRole(opt.id)}
-                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-slate-200 dark:border-white/5 opacity-70'}`}
+                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-slate-900 bg-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/5 opacity-70 text-slate-700 dark:text-slate-300'}`}
                   >
                     <div className="text-lg mb-1">{opt.icon}</div>
                     {opt.label}
@@ -1010,7 +1031,7 @@ export default function App() {
               <button 
                 onClick={handleGenerateProcess} 
                 disabled={isProcessGenerating || !processTopic.trim()} 
-                className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-transform active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-600/20"
+                className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl text-xs font-bold disabled:opacity-50 ${btnPrimary}`}
               >
                 <Send className="w-3.5 h-3.5" />
                 {isProcessGenerating ? 'Обработка запроса...' : 'Отправить запрос'}
@@ -1020,9 +1041,9 @@ export default function App() {
             {processMessages.length > 0 && (
               <div className="space-y-4">
                 {processMessages.map((msg, idx) => (
-                  <div key={idx} className={`p-5 rounded-2xl border text-sm ${msg.role === 'user' ? 'bg-emerald-600/10 border-emerald-500/20 text-emerald-300 ml-6' : `${cardBg} mr-6`}`}>
+                  <div key={idx} className={`p-5 rounded-2xl border text-sm ${msg.role === 'user' ? 'bg-slate-100 border-slate-200 text-slate-800 dark:bg-white/10 dark:border-white/20 dark:text-white ml-6' : `${cardBg} mr-6`}`}>
                     <div className="font-bold text-xs mb-2 opacity-60 flex items-center gap-1.5">
-                      {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3 text-emerald-500" />}
+                      {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
                       {msg.role === 'user' ? 'Ваш запрос' : 'Ответ Ассистента'}
                     </div>
                     <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
@@ -1031,15 +1052,15 @@ export default function App() {
                       <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
                         <button 
                           onClick={() => handleCreateTaskFromAI(msg.content)} 
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors flex items-center gap-1.5"
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
                         >
-                          <Plus className="w-3.5 h-3.5" /> Создать задачу из этого ответа
+                          <Plus className="w-3.5 h-3.5" /> В задачу
                         </button>
                         <button 
                           onClick={() => handleSaveToSOP(msg.content)} 
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition-colors flex items-center gap-1.5"
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
                         >
-                          <BookOpen className="w-3.5 h-3.5" /> Сохранить как Регламент
+                          <BookOpen className="w-3.5 h-3.5" /> Сохранить регламент
                         </button>
                       </div>
                     )}
@@ -1055,7 +1076,7 @@ export default function App() {
                     placeholder="Уточнить или попросить переделать..." 
                     className="flex-1 bg-transparent outline-none text-xs font-medium" 
                   />
-                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className="px-4 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-xs flex items-center gap-1">
+                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className={`px-4 py-2.5 rounded-xl text-xs flex items-center gap-1 ${btnPrimary}`}>
                     <Send className="w-3 h-3" /> Отправить
                   </button>
                 </div>
@@ -1075,15 +1096,15 @@ export default function App() {
               {sops.map(sop => (
                 <div key={sop.id} className={`p-5 rounded-2xl border flex flex-col ${cardBg}`}>
                   <div className="flex justify-between items-start mb-3">
-                    <h4 className="font-bold text-sm text-emerald-400 leading-snug pr-4">{sop.title}</h4>
+                    <h4 className={`font-bold text-sm leading-snug pr-4 ${textMain}`}>{sop.title}</h4>
                     <span className="text-[10px] text-slate-500 whitespace-nowrap">{sop.date}</span>
                   </div>
                   <p className="text-xs text-slate-400 line-clamp-4 mb-4">{sop.content}</p>
                   <div className="mt-auto flex justify-between items-center pt-3 border-t border-slate-200 dark:border-white/10">
-                    <button onClick={() => { navigator.clipboard.writeText(sop.content); toast.success('Скопировано'); }} className="text-xs font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1">
+                    <button onClick={() => { navigator.clipboard.writeText(sop.content); toast.success('Скопировано'); }} className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-1">
                       <Copy className="w-3.5 h-3.5"/> Копировать
                     </button>
-                    <button onClick={() => handleDeleteSOP(sop.id)} className="text-xs font-bold text-red-400 hover:text-red-300">
+                    <button onClick={() => handleDeleteSOP(sop.id)} className="text-xs font-bold text-red-500 hover:text-red-400">
                       <Trash2 className="w-3.5 h-3.5"/>
                     </button>
                   </div>
@@ -1103,7 +1124,7 @@ export default function App() {
               </div>
               <button 
                 onClick={() => setIsInviteOpen(true)} 
-                className="flex items-center gap-1.5 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                className={`px-5 py-3 rounded-2xl text-xs font-bold flex items-center gap-1.5 ${btnPrimary}`}
               >
                 <Plus className="w-4 h-4" /> Пригласить сотрудника
               </button>
@@ -1117,7 +1138,7 @@ export default function App() {
                 return (
                   <div key={ast.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-sm">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-white flex items-center justify-center font-bold text-sm">
                         {ast.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
@@ -1126,13 +1147,13 @@ export default function App() {
                         </h4>
                         <p className="text-xs text-slate-400">
                           {ast.position ? `${ast.position} • ` : ''}{ast.email || 'Владелец аккаунта'}
-                          <span className="ml-2 font-semibold text-emerald-400">
+                          <span className="ml-2 font-semibold text-slate-600 dark:text-slate-300">
                             ({activeTasksCount} задач • {totalHours}ч)
                           </span>
                         </p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-slate-500/10 text-slate-400">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400">
                       {ast.role === 'manager' || ast.id === 'manager' ? 'Руководитель' : 'Исполнитель'}
                     </span>
                   </div>
@@ -1150,14 +1171,14 @@ export default function App() {
                 <h3 className={`text-base font-bold ${textMain}`}>Сводка для руководителя</h3>
                 <p className="text-xs text-slate-400 mt-1">Автоматический ИИ-анализ эффективности и рисков компании.</p>
               </div>
-              <button onClick={handleGenerateTeamReport} disabled={isGeneratingReport} className="px-5 py-3 bg-emerald-600 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20">
+              <button onClick={handleGenerateTeamReport} disabled={isGeneratingReport} className={`px-5 py-3 rounded-2xl text-xs font-bold ${btnPrimary}`}>
                 {isGeneratingReport ? 'Анализ...' : 'Сформировать отчет'}
               </button>
             </div>
 
             {teamReport && (
               <div className={`p-6 rounded-3xl border relative ${cardBg}`}>
-                <button onClick={handleCopyReport} className="absolute top-4 right-4 p-2 bg-slate-800 rounded-lg hover:bg-slate-700 text-emerald-400 transition-colors" title="Скопировать отчет">
+                <button onClick={handleCopyReport} className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-white/10 rounded-lg text-slate-500 dark:text-slate-300 transition-colors" title="Скопировать отчет">
                   <Copy className="w-4 h-4" />
                 </button>
                 <div className="whitespace-pre-wrap text-sm leading-relaxed">{teamReport}</div>
@@ -1168,11 +1189,11 @@ export default function App() {
               {kpis.map((kpi) => (
                 <div key={kpi.id} className={`p-5 rounded-2xl border flex justify-between items-center ${cardBg}`}>
                   <div>
-                    <h4 className="font-bold text-sm">{kpi.name}</h4>
+                    <h4 className={`font-bold text-sm ${textMain}`}>{kpi.name}</h4>
                     <p className="text-xs text-slate-400">{kpi.desc}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl font-black">{kpi.score}%</span>
+                    <span className={`text-2xl font-black ${textMain}`}>{kpi.score}%</span>
                   </div>
                 </div>
               ))}
@@ -1190,7 +1211,7 @@ export default function App() {
               archive.map(task => (
                 <div key={task.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
                   <span className="text-sm font-semibold line-through text-slate-400">{task.text}</span>
-                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-emerald-400 hover:underline">Восстановить</button>
+                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">Восстановить</button>
                 </div>
               ))
             )}
@@ -1211,18 +1232,31 @@ export default function App() {
             <form onSubmit={handleSaveTask} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Название задачи</label>
-                
-                {/* ПОЛЕ ВВОДА + КНОПКА МИКРОФОНА */}
                 <div className="flex gap-2">
-                  <input type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Что нужно сделать?" className={`flex-1 p-3.5 rounded-xl outline-none border text-sm font-medium ${inputBg}`} />
-                  <button type="button" onClick={toggleVoiceInput} className={`w-12 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${isListening ? 'bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20'}`}>
+                  <input 
+                    type="text" 
+                    value={newTaskTitle} 
+                    onChange={(e) => setNewTaskTitle(e.target.value)} 
+                    placeholder="Что нужно сделать?" 
+                    required 
+                    className={`flex-1 p-3.5 rounded-xl outline-none border text-sm font-medium ${inputBg}`} 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={toggleVoiceInput} 
+                    className={`w-12 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${isListening ? 'bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300'}`}
+                  >
                     <Mic className="w-5 h-5" />
                   </button>
                 </div>
-
+                
                 <div className="flex gap-2 mt-2">
-                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"><Sparkles className="w-3.5 h-3.5 text-emerald-500" /> Расписать ИИ</button>
-                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-500/10 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Чек-лист ИИ</button>
+                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                    <Sparkles className="w-3.5 h-3.5" /> Расписать ИИ
+                  </button>
+                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Чек-лист ИИ
+                  </button>
                 </div>
               </div>
 
@@ -1231,11 +1265,22 @@ export default function App() {
                 <textarea value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} rows="4" className={`w-full p-3.5 rounded-xl outline-none border text-xs resize-none ${inputBg}`} />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Оценка (часы)</label>
+                  <input type="number" step="0.5" value={newTaskHours} onChange={(e) => setNewTaskHours(e.target.value)} placeholder="1.5" className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Дедлайн</label>
+                  <input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`} />
+                </div>
+              </div>
+
               <div className="flex gap-2">
-                <button type="button" onClick={() => setNewUrgent(!newUrgent)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newUrgent ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
+                <button type="button" onClick={() => setNewUrgent(!newUrgent)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newUrgent ? 'bg-red-500/10 border-red-500 text-red-500' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
                   <Flame className="w-3.5 h-3.5" /> Срочно
                 </button>
-                <button type="button" onClick={() => setNewImportant(!newImportant)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newImportant ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
+                <button type="button" onClick={() => setNewImportant(!newImportant)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newImportant ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
                   <Gem className="w-3.5 h-3.5" /> Важно
                 </button>
               </div>
@@ -1249,12 +1294,12 @@ export default function App() {
                 </div>
               )}
 
-              <button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20">
+              <button type="submit" className={`w-full py-3.5 rounded-2xl text-xs font-bold ${btnPrimary}`}>
                 Сохранить задачу
               </button>
 
               {selectedTask && (
-                <button type="button" onClick={() => handleDeleteTask(selectedTask.id)} className="w-full py-2 text-xs font-bold text-red-400 hover:underline text-center flex items-center justify-center gap-1">
+                <button type="button" onClick={() => handleDeleteTask(selectedTask.id)} className="w-full py-2 text-xs font-bold text-red-500 hover:text-red-400 text-center flex items-center justify-center gap-1">
                   <Trash2 className="w-3.5 h-3.5" /> Удалить задачу
                 </button>
               )}
@@ -1287,7 +1332,7 @@ export default function App() {
                   <option value="manager">Руководитель (Полный доступ)</option>
                 </select>
               </div>
-              <button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-emerald-600/20">
+              <button type="submit" className={`w-full py-3.5 rounded-2xl text-xs font-bold ${btnPrimary}`}>
                 Отправить приглашение
               </button>
             </form>
@@ -1311,21 +1356,21 @@ export default function App() {
                 <button 
                   key={size} 
                   onClick={() => setOnboardTeam(size)}
-                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left ${onboardTeam === size ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-slate-200 dark:border-white/10'}`}
+                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left ${onboardTeam === size ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
                 >
                   {size}
                 </button>
               ))}
             </div>
 
-            {/* БЛОК АКТИВАЦИИ ПРОМОКОДА ПАРТНЕРА */}
+            {/* БЛОК АКТИВАЦИИ ПРОМОКОДА ПАРТНЕРА (ВОССТАНОВЛЕН) */}
             <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
               <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
-                <Tag className="w-3 h-3 text-emerald-500" /> Промокод партнера
+                <Tag className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Промокод партнера
               </label>
               
               {docData?.appliedPromo ? (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+                <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 dark:bg-white/10 dark:border-white/20 dark:text-white text-xs font-bold flex items-center gap-2">
                   <Award className="w-4 h-4" /> Активирован код: {docData.appliedPromo} (PRO)
                 </div>
               ) : (
@@ -1340,9 +1385,9 @@ export default function App() {
                   <button 
                     onClick={handleApplyPromo} 
                     disabled={isApplyingPromo || !promoInput.trim()} 
-                    className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all disabled:opacity-50"
+                    className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 font-bold text-xs rounded-xl transition-all disabled:opacity-50"
                   >
-                    {isApplyingPromo ? '...' : 'Активировать'}
+                    {isApplyingPromo ? '...' : 'Ввод'}
                   </button>
                 </div>
               )}
@@ -1351,7 +1396,7 @@ export default function App() {
             {/* БЛОК TELEGRAM УВЕДОМЛЕНИЙ */}
             <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
               <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
-                <MessageCircle className="w-3 h-3 text-blue-500" /> Telegram Уведомления
+                <MessageCircle className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Telegram Уведомления
               </label>
               <input 
                 type="text" 
@@ -1363,7 +1408,7 @@ export default function App() {
               <p className="text-[9px] text-slate-400 mt-1">Вставьте ваш Chat ID для получения уведомлений от бота.</p>
             </div>
 
-            <button onClick={handleSaveSettings} className="w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20">
+            <button onClick={handleSaveSettings} className={`w-full py-3.5 rounded-xl text-xs font-bold ${btnPrimary}`}>
               Сохранить изменения
             </button>
           </div>
