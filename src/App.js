@@ -221,6 +221,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('matrix');
   const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
+  const t = (key) => translations['ru'][key] || key;
+
 
   // Голосовой ввод
   const [isListening, setIsListening] = useState(false);
