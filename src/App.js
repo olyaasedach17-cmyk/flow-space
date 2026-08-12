@@ -8,7 +8,7 @@ import {
   signInWithPopup, 
   sendPasswordResetEmail 
 } from 'firebase/auth';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { Toaster, toast } from 'sonner';
 import { 
   Flame, 
@@ -34,7 +34,9 @@ import {
   CheckCircle2, 
   LogOut,
   Filter,
-  Briefcase
+  Tag,
+  Gift,
+  Award
 } from 'lucide-react';
 
 // ==========================================
@@ -64,7 +66,7 @@ const defaultKpis = [
 
 const aiOptions = [
   { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Посты, статьи)' },
-  { id: 'smm', icon: '📲', label: 'SMM / Маркетолог (Контент, идей)' },
+  { id: 'smm', icon: '📲', label: 'SMM / Маркетолог (Контент, идеи)' },
   { id: 'sales', icon: '💼', label: 'Менеджер по продажам (Скрипты)' },
   { id: 'consultant', icon: '🧠', label: 'Консультант (Стратегия)' },
   { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' }
@@ -216,6 +218,10 @@ export default function App() {
   // Фильтр по сотрудникам
   const [assigneeFilter, setAssigneeFilter] = useState('all');
 
+  // Промокод
+  const [promoInput, setPromoInput] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskHours, setNewTaskHours] = useState('');
@@ -266,6 +272,8 @@ export default function App() {
       } else {
         setDoc(docRef, {
           email: user.email.toLowerCase(),
+          isPro: false,
+          appliedPromo: null,
           settings: { isTeamMode: false, teamSize: '👤 Я один' },
           assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель', role: 'manager' }],
           workspaces: { 'manager': { tasks: [], archive: [], kpis: defaultKpis, savedTime: 0 } }
@@ -315,9 +323,34 @@ export default function App() {
   const kpis = currentWorkspace.kpis || defaultKpis;
   const assistants = docData?.assistants || [];
   
+  const isPro = docData?.isPro || !!docData?.appliedPromo;
   const isTeamMode = docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один');
 
-  // Фильтрация задач на доске
+  // Применение промокода
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim()) return toast.error('Введите промокод');
+    const code = promoInput.toUpperCase().trim();
+    setIsApplyingPromo(true);
+
+    try {
+      // Имитация или реальная проверка через БД
+      await setDoc(doc(db, 'users', user.uid), {
+        appliedPromo: code,
+        isPro: true,
+        settings: { ...docData?.settings, isTeamMode: true }
+      }, { merge: true });
+
+      setOnboardTeam('👥 2-5 человек');
+      toast.success(`Промокод "${code}" применен! Вам активирован PRO-доступ.`);
+      setPromoInput('');
+      setShowOnboarding(false);
+    } catch (err) {
+      toast.error('Ошибка активации: ' + err.message);
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
   const filteredTasks = assigneeFilter === 'all' 
     ? tasks 
     : tasks.filter(t => t.assigneeName === assigneeFilter);
@@ -499,7 +532,6 @@ export default function App() {
     }
   };
 
-  // Создание задачи из ответа ИИ
   const handleCreateTaskFromAI = (content) => {
     setSelectedTask(null);
     setNewTaskTitle(content.slice(0, 45) + '...');
@@ -643,9 +675,16 @@ export default function App() {
       
       {/* ДЕСКТОПНОЕ МЕНЮ */}
       <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-2 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200'}`}>
-        <div className="flex items-center gap-3 mb-6 px-2">
-          <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-md">FS</div>
-          <h1 className={`text-lg font-black tracking-tight ${textMain}`}>Flow Space</h1>
+        <div className="flex items-center justify-between mb-6 px-2">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-md">FS</div>
+            <h1 className={`text-lg font-black tracking-tight ${textMain}`}>Flow Space</h1>
+          </div>
+          {isPro && (
+            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase">
+              PRO
+            </span>
+          )}
         </div>
 
         <button onClick={() => openTaskModal()} className="flex items-center justify-center gap-2 w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm mb-4 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all">
@@ -676,7 +715,7 @@ export default function App() {
 
         <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-2">
           <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-400 px-2 hover:text-slate-200">
-            <Settings className="w-3.5 h-3.5" /> Режим: {isTeamMode ? 'Команда' : 'Соло'}
+            <Settings className="w-3.5 h-3.5" /> Настройки {isPro ? '(PRO)' : ''}
           </button>
           <button onClick={() => signOut(auth)} className="flex items-center gap-2 w-full text-left px-2 py-2 text-xs font-bold text-red-400 hover:underline">
             <LogOut className="w-3.5 h-3.5" /> Выйти из аккаунта
@@ -1062,11 +1101,15 @@ export default function App() {
         </div>
       )}
 
-      {/* МОДАЛЬНОЕ ОКНО НАСТРОЙКИ РЕЖИМА */}
+      {/* МОДАЛЬНОЕ ОКНО НАСТРОЙКИ РЕЖИМА И ПАРТНЕРСКИХ ПРОМОКОДОВ */}
       {showOnboarding && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className={`w-full max-w-sm rounded-3xl p-6 border ${cardBg}`}>
-            <h3 className={`text-lg font-bold mb-3 ${textMain}`}>Режим работы</h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className={`text-lg font-bold ${textMain}`}>Настройки аккаунта</h3>
+              <button onClick={() => setShowOnboarding(false)} className="text-slate-400 font-bold"><X className="w-5 h-5" /></button>
+            </div>
+            
             <p className="text-xs text-slate-400 mb-4">Выберите формат работы для адаптации интерфейса.</p>
             
             <div className="space-y-2 mb-6">
@@ -1081,8 +1124,38 @@ export default function App() {
               ))}
             </div>
 
+            {/* БЛОК АКТИВАЦИИ ПРОМОКОДА ПАРТНЕРА */}
+            <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
+              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
+                <Tag className="w-3 h-3 text-emerald-500" /> Промокод партнера
+              </label>
+              
+              {docData?.appliedPromo ? (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+                  <Award className="w-4 h-4" /> Активирован код: {docData.appliedPromo} (PRO)
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={promoInput} 
+                    onChange={(e) => setPromoInput(e.target.value)} 
+                    placeholder="Например: CRISIS2026" 
+                    className={`flex-1 p-3 rounded-xl outline-none border text-xs font-semibold ${inputBg}`} 
+                  />
+                  <button 
+                    onClick={handleApplyPromo} 
+                    disabled={isApplyingPromo || !promoInput.trim()} 
+                    className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? '...' : 'Активировать'}
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button onClick={handleSaveSettings} className="w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20">
-              Сохранить
+              Сохранить изменения
             </button>
           </div>
         </div>
