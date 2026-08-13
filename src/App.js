@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, db, googleProvider } from './firebase';
 import { 
   onAuthStateChanged, 
@@ -66,22 +66,6 @@ const defaultKpis = [
   { id: 2, name: 'Качество (без возвратов)', weight: 35, max: 100, score: 88, desc: 'Задачи, принятые руководителем с первого раза.' },
   { id: 3, name: 'Инициативность', weight: 25, max: 5, score: 4, desc: 'Самостоятельное решение проблем.' },
 ];
-const defaultAutomations = [
-  {
-    id: 'auto_urgent_tg',
-    name: 'Срочная задача ➔ Алерт в Telegram',
-    event: 'task_created',
-    condition: 'is_urgent',
-    enabled: true
-  },
-  {
-    id: 'auto_review_notify',
-    name: 'Перевод «На проверку» ➔ Уведомление',
-    event: 'status_changed',
-    targetStatus: 'review',
-    enabled: true
-  }
-];
 
 const aiOptions = [
   { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Посты, статьи)' },
@@ -90,6 +74,7 @@ const aiOptions = [
   { id: 'consultant', icon: '🧠', label: 'Консультант (Стратегия)' },
   { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' }
 ];
+
 const taskTemplates = [
   {
     id: 'marketing',
@@ -131,8 +116,46 @@ const taskTemplates = [
   }
 ];
 
-// Премиальные стили кнопок
+const defaultAutomations = [
+  {
+    id: 'auto_urgent_tg',
+    name: 'Срочная задача ➔ Алерт в Telegram',
+    event: 'task_created',
+    condition: 'is_urgent',
+    enabled: true
+  },
+  {
+    id: 'auto_review_notify',
+    name: 'Перевод «На проверке» ➔ Уведомление',
+    event: 'status_changed',
+    targetStatus: 'review',
+    enabled: true
+  }
+];
+
 const btnPrimary = "bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 transition-all shadow-md";
+
+const handleError = (error, context = 'Операция') => {
+  console.error(`Error in ${context}:`, error);
+  if (error?.code === 'permission-denied') {
+    toast.error('У вас нет прав для выполнения этой операции');
+  } else if (error?.code === 'unavailable') {
+    toast.error('Сервис временно недоступен. Проверьте подключение к сети');
+  } else {
+    toast.error(`${context}: ${error.message || 'Неизвестная ошибка'}`);
+  }
+};
+
+const safeParseAIJSON = (rawContent) => {
+  let cleaned = rawContent.trim();
+  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/```json/g, '').replace(/```/g, '').trim();
+  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/```/g, '').trim();
+  const parsed = JSON.parse(cleaned);
+  if (!Array.isArray(parsed)) {
+    throw new Error('Ответ от AI не является валидным списком задач');
+  }
+  return parsed;
+};
 
 async function callServerAI(endpointData) {
   const response = await fetch('/api/ai', {
@@ -149,9 +172,9 @@ async function callServerAI(endpointData) {
 }
 
 // ==========================================
-// 2. КАРТОЧКА ЗАДАЧИ
+// 2. КАРТОЧКА И КОЛОНКА ЗАДАЧ
 // ==========================================
-function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
+const TaskCard = React.memo(({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) => {
   const cardBase = task.urgent 
     ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50/70 border-red-200')
     : (isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200');
@@ -246,9 +269,9 @@ function TaskCard({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) {
       </div>
     </div>
   );
-}
+});
 
-function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, t, onSelectTask, onQuickMove }) {
+const TaskColumn = React.memo(({ title, colorClass, tasks, isTeamMode, isDark, onSelectTask, onQuickMove }) => {
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 mb-3 px-1">
@@ -260,7 +283,7 @@ function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, t, onSelectT
       <div className="space-y-3 grow">
         {tasks.length === 0 ? (
           <div className={`text-center py-6 rounded-2xl border border-dashed text-xs ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
-            {t('empty')}
+            Задач пока нет
           </div>
         ) : (
           tasks.map(task => (
@@ -277,7 +300,7 @@ function TaskColumn({ title, colorClass, tasks, isTeamMode, isDark, t, onSelectT
       </div>
     </div>
   );
-}
+});
 
 // ==========================================
 // 3. ОСНОВНОЕ ПРИЛОЖЕНИЕ FLOW SPACE
@@ -291,14 +314,22 @@ export default function App() {
   const [docData, setDocData] = useState(null);
   const [currentAssistantId, setCurrentAssistantId] = useState('manager');
 
-  // ВОССТАНОВЛЕННЫЕ ПЕРЕМЕННЫЕ, ИЗ-ЗА КОТОРЫХ БЫЛА ОШИБКА
   const [activeTab, setActiveTab] = useState('matrix');
   const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
-  const t = (key) => translations['ru'][key] || key;
+
+  const t = useCallback((key) => translations['ru'][key] || key, []);
 
   // Голосовой ввод
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
 
   const [selectedTask, setSelectedTask] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -343,7 +374,6 @@ export default function App() {
   const [teamReport, setTeamReport] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  // Сохранение темы
   useEffect(() => {
     localStorage.setItem('flowspace_theme', isDark ? 'dark' : 'light');
     if (isDark) {
@@ -353,7 +383,6 @@ export default function App() {
     }
   }, [isDark]);
 
-  // Подписка на пользователя
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -361,7 +390,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Подписка на базу данных
   useEffect(() => {
     if (!user) return;
     const docRef = doc(db, 'users', user.uid);
@@ -376,17 +404,17 @@ export default function App() {
           email: user.email.toLowerCase(),
           isPro: false,
           appliedPromo: null,
-          settings: { isTeamMode: false, teamSize: '👤 Я один', telegramChatId: '' },
+          settings: { isTeamMode: false, teamSize: '👤 Я один', telegramChatId: '', automations: defaultAutomations },
           assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель', role: 'manager' }],
           workspaces: { 'manager': { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } }
-        });
+        }).catch(err => handleError(err, 'Инициализация профиля'));
       }
-    });
+    }, (error) => handleError(error, 'Синхронизация данных'));
+
     return () => unsubscribe();
   }, [user]);
 
-  // 🔥 ИНТЕГРАЦИЯ С ТЕЛЕГРАМ
-  const notifyTelegram = async (message) => {
+  const notifyTelegram = useCallback(async (message) => {
     const chatId = docData?.settings?.telegramChatId;
     if (!chatId) return; 
     try {
@@ -398,28 +426,27 @@ export default function App() {
     } catch (error) {
       console.error('Ошибка отправки в Telegram:', error);
     }
-  };
-  const processTaskAutomations = (event, taskData) => {
+  }, [docData?.settings?.telegramChatId]);
+
+  const processTaskAutomations = useCallback((event, taskData) => {
     const rules = docData?.settings?.automations || defaultAutomations;
 
     rules.forEach((rule) => {
       if (!rule.enabled) return;
 
-      // Правило 1: Создание срочной задачи
       if (event === 'task_created' && rule.event === 'task_created') {
         if (rule.condition === 'is_urgent' && taskData.urgent) {
           notifyTelegram(`⚡ [АВТОМАТИЗАЦИЯ]: Создана срочная задача «${taskData.text}»!`);
         }
       }
 
-      // Правило 2: Изменение статуса на "На проверке"
       if (event === 'status_changed' && rule.event === 'status_changed') {
         if (taskData.status === rule.targetStatus) {
           notifyTelegram(`⚡ [АВТОМАТИЗАЦИЯ]: Задача «${taskData.text}» требует проверки руководителем.`);
         }
       }
     });
-  };
+  }, [docData?.settings?.automations, notifyTelegram]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -432,7 +459,7 @@ export default function App() {
         toast.success('Аккаунт успешно создан!');
       }
     } catch (error) {
-      toast.error('Ошибка авторизации: ' + error.message);
+      handleError(error, 'Авторизация');
     }
   };
 
@@ -441,7 +468,7 @@ export default function App() {
       await signInWithPopup(auth, googleProvider);
       toast.success('Успешный вход через Google');
     } catch (error) {
-      toast.error('Ошибка входа через Google: ' + error.message);
+      handleError(error, 'Google Авторизация');
     }
   };
 
@@ -451,21 +478,32 @@ export default function App() {
       await sendPasswordResetEmail(auth, email);
       toast.success('Письмо для сброса пароля отправлено на ваш e-mail.');
     } catch (error) {
-      toast.error('Ошибка сброса пароля: ' + error.message);
+      handleError(error, 'Сброс пароля');
     }
   };
 
-  const currentWorkspace = docData?.workspaces?.[currentAssistantId] || {};
-  const tasks = currentWorkspace.tasks || [];
-  const archive = currentWorkspace.archive || [];
-  const sops = currentWorkspace.sops || [];
-  const kpis = currentWorkspace.kpis || defaultKpis;
-  const assistants = docData?.assistants || [];
+  const currentWorkspace = useMemo(() => docData?.workspaces?.[currentAssistantId] || {}, [docData, currentAssistantId]);
+  const tasks = useMemo(() => currentWorkspace.tasks || [], [currentWorkspace]);
+  const archive = useMemo(() => currentWorkspace.archive || [], [currentWorkspace]);
+  const sops = useMemo(() => currentWorkspace.sops || [], [currentWorkspace]);
+  const kpis = useMemo(() => currentWorkspace.kpis || defaultKpis, [currentWorkspace]);
+  const assistants = useMemo(() => docData?.assistants || [], [docData]);
   
-  const isPro = docData?.isPro || !!docData?.appliedPromo;
-  const isTeamMode = docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один');
+  const isPro = useMemo(() => docData?.isPro || !!docData?.appliedPromo, [docData]);
+  const isTeamMode = useMemo(() => docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один'), [docData, onboardTeam]);
 
-  // Применение промокода
+  // Мемоизированная фильтрация по исполнителям и статусам
+  const filteredTasks = useMemo(() => {
+    return assigneeFilter === 'all' 
+      ? tasks 
+      : tasks.filter(tItem => tItem.assigneeName === assigneeFilter);
+  }, [tasks, assigneeFilter]);
+
+  const todoTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'todo'), [filteredTasks]);
+  const inProgressTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'in_progress'), [filteredTasks]);
+  const reviewTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'review'), [filteredTasks]);
+  const deferredTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'deferred'), [filteredTasks]);
+
   const handleApplyPromo = async () => {
     if (!promoInput.trim()) return toast.error('Введите промокод');
     const code = promoInput.toUpperCase().trim();
@@ -483,26 +521,46 @@ export default function App() {
       setPromoInput('');
       setShowOnboarding(false);
     } catch (err) {
-      toast.error('Ошибка активации: ' + err.message);
+      handleError(err, 'Активация промокода');
     } finally {
       setIsApplyingPromo(false);
     }
   };
 
-  const filteredTasks = assigneeFilter === 'all' 
-    ? tasks 
-    : tasks.filter(t => t.assigneeName === assigneeFilter);
-
-  const todoTasks = filteredTasks.filter(t => t.status === 'todo');
-  const inProgressTasks = filteredTasks.filter(t => t.status === 'in_progress');
-  const reviewTasks = filteredTasks.filter(t => t.status === 'review');
-  const deferredTasks = filteredTasks.filter(t => t.status === 'deferred');
-
-  const updateWorkspace = (newData) => {
+  const updateWorkspace = useCallback((newData) => {
     setDoc(doc(db, 'users', user.uid), {
       workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } }
-    }, { merge: true });
-  };
+    }, { merge: true }).catch(err => handleError(err, 'Сохранение рабочей области'));
+  }, [user, docData, currentAssistantId, currentWorkspace]);
+
+  // 🔥 Применение шаблона с валидацией
+  const handleApplyTemplate = useCallback((template) => {
+    try {
+      if (!template || !template.tasks || template.tasks.length === 0) {
+        throw new Error('Шаблон пуст или поврежден');
+      }
+
+      const newTasks = template.tasks.map((tItem, idx) => ({
+        id: Date.now() + idx,
+        text: tItem.text,
+        description: tItem.description || '',
+        estimatedHours: tItem.estimatedHours || 1,
+        dueDate: '',
+        urgent: tItem.urgent || false,
+        important: tItem.important || false,
+        status: 'todo',
+        assigneeName: isTeamMode ? 'Владелец' : null
+      }));
+
+      updateWorkspace({ tasks: [...newTasks, ...tasks] });
+      toast.success(`Пакет "${template.name}" добавлен на доску (${newTasks.length} задач)`);
+      notifyTelegram(`📦 Добавлен пакет задач "${template.name}"`);
+      setIsCreateOpen(false);
+    } catch (error) {
+      console.error('Ошибка применения шаблона:', error);
+      toast.error(error.message || 'Не удалось применить шаблон');
+    }
+  }, [isTeamMode, tasks, updateWorkspace, notifyTelegram]);
 
   const handleInviteColleague = async (e) => {
     e.preventDefault();
@@ -510,28 +568,31 @@ export default function App() {
     const newAssistantId = `emp_${Date.now()}`;
     const newAssistantName = inviteEmail.split('@')[0];
     
-    await setDoc(doc(db, 'users', user.uid), {
-      assistants: [...assistants, { 
-        id: newAssistantId, 
-        name: newAssistantName, 
-        email: inviteEmail, 
-        role: inviteRole,
-        position: invitePosition || 'Сотрудник'
-      }],
-      workspaces: { 
-        ...docData.workspaces, 
-        [newAssistantId]: { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } 
-      }
-    }, { merge: true });
-    
-    setIsInviteOpen(false); 
-    setInviteEmail(''); 
-    setInvitePosition('');
-    toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        assistants: [...assistants, { 
+          id: newAssistantId, 
+          name: newAssistantName, 
+          email: inviteEmail, 
+          role: inviteRole,
+          position: invitePosition || 'Сотрудник'
+        }],
+        workspaces: { 
+          ...docData.workspaces, 
+          [newAssistantId]: { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } 
+        }
+      }, { merge: true });
+      
+      setIsInviteOpen(false); 
+      setInviteEmail(''); 
+      setInvitePosition('');
+      toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
+    } catch (err) {
+      handleError(err, 'Приглашение сотрудника');
+    }
   };
 
-  // 🔥 ГОЛОСОВОЙ ВВОД (Внутри карточки задачи)
-  const toggleVoiceInput = () => {
+  const toggleVoiceInput = useCallback(() => {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
@@ -558,8 +619,7 @@ export default function App() {
       try {
         const prompt = `Пользователь надиктовал: "${transcript}".
         Выдели из текста задачи. Верни ТОЛЬКО валидный JSON-массив объектов:
-        [{"text": "Краткое название", "description": "Детали", "assignee": "Имя (если звучит)", "urgent": true/false, "important": true/false}]
-        Если исполнитель не назван, оставь null.`;
+        [{"text": "Краткое название", "description": "Детали", "assignee": "Имя (если звучит)", "urgent": true/false, "important": true/false}]`;
 
         const response = await callServerAI({
           model: 'gpt-4o-mini',
@@ -567,40 +627,36 @@ export default function App() {
           temperature: 0.1
         });
 
-        let rawContent = response.choices[0].message.content.trim();
-        if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-        const aiTasks = JSON.parse(rawContent);
+        const aiTasks = safeParseAIJSON(response.choices[0].message.content);
 
-        const newTasks = aiTasks.map((t, idx) => ({
+        const newTasks = aiTasks.map((tItem, idx) => ({
           id: Date.now() + idx,
-          text: t.text,
-          description: t.description || '',
+          text: tItem.text || 'Новая задача',
+          description: tItem.description || '',
           estimatedHours: 1,
-          urgent: t.urgent || false,
-          important: t.important || false,
+          urgent: !!tItem.urgent,
+          important: !!tItem.important,
           status: 'todo',
-          assigneeName: isTeamMode && t.assignee ? (assistants.find(a => a.name.toLowerCase().includes(t.assignee.toLowerCase()))?.name || null) : null
+          assigneeName: isTeamMode && tItem.assignee ? (assistants.find(a => a.name.toLowerCase().includes(tItem.assignee.toLowerCase()))?.name || null) : null
         }));
 
         updateWorkspace({ tasks: [...newTasks, ...tasks] });
         toast.success(`Успешно создано задач: ${newTasks.length}`);
         
         notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
-        
-        // Закрываем окно создания после диктовки
         setIsCreateOpen(false);
 
       } catch (err) {
-        toast.error('Не удалось разобрать голос: ' + err.message);
+        handleError(err, 'Голосовой ввод');
       }
     };
 
     recognition.onerror = () => setIsListening(false);
     recognition.start();
-  };
+  }, [isListening, isTeamMode, assistants, tasks, updateWorkspace, notifyTelegram]);
 
   const handleRunAIAgent = async () => {
-    const targetTask = tasks.find(t => t.status === 'todo' && (!t.description || parseFloat(t.estimatedHours) === 0));
+    const targetTask = tasks.find(tItem => tItem.status === 'todo' && (!tItem.description || parseFloat(tItem.estimatedHours) === 0));
     if (!targetTask) return toast.info("Все задачи в бэклоге уже оформлены!");
 
     setIsAgentRunning(true);
@@ -617,21 +673,23 @@ export default function App() {
 
       let rawContent = response.choices[0].message.content.trim();
       if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+      if (rawContent.startsWith('```')) rawContent = rawContent.replace(/```/g, '').trim();
+      
       const aiResult = JSON.parse(rawContent);
 
       updateWorkspace({
-        tasks: tasks.map(t => t.id === targetTask.id ? {
-          ...t,
-          description: aiResult.description || t.description,
+        tasks: tasks.map(tItem => tItem.id === targetTask.id ? {
+          ...tItem,
+          description: aiResult.description || tItem.description,
           estimatedHours: aiResult.estimatedHours || 1,
           urgent: !!aiResult.urgent,
           important: !!aiResult.important,
           assigneeName: isTeamMode ? aiResult.assignee : null
-        } : t)
+        } : tItem)
       });
       toast.success('Агент успешно расписал задачу!');
     } catch (error) {
-      toast.error('Ошибка агента: ' + error.message);
+      handleError(error, 'Запуск Умного Агента');
     } finally {
       setIsAgentRunning(false);
     }
@@ -649,7 +707,7 @@ export default function App() {
       setTeamReport(data.choices[0].message.content.trim());
       toast.success('Отчет сформирован');
     } catch (err) {
-      toast.error('Ошибка отчета: ' + err.message);
+      handleError(err, 'Генерация отчета');
     } finally {
       setIsGeneratingReport(false);
     }
@@ -679,7 +737,7 @@ export default function App() {
       setNewTaskDesc(data.choices[0].message.content.trim());
       toast.success('Текст сформирован');
     } catch (err) {
-      toast.error('Ошибка ИИ: ' + err.message);
+      handleError(err, 'ИИ Генератор задач');
     } finally {
       setIsTaskGenerating(false);
     }
@@ -708,7 +766,7 @@ export default function App() {
       ]);
       setProcessTopic('');
     } catch (err) {
-      toast.error('Ошибка Ассистента: ' + err.message);
+      handleError(err, 'ИИ Ассистент');
     } finally {
       setIsProcessGenerating(false);
     }
@@ -718,9 +776,10 @@ export default function App() {
     if (!followUpText.trim()) return;
     setIsProcessGenerating(true);
     try {
+      const recentMessages = processMessages.slice(-10);
       const messagesPayload = [
         { role: 'system', content: 'Продолжай вести диалог как эксперт.' },
-        ...processMessages,
+        ...recentMessages,
         { role: 'user', content: followUpText }
       ];
 
@@ -731,20 +790,19 @@ export default function App() {
       });
 
       const responseText = data.choices[0].message.content.trim();
-      setProcessMessages([
-        ...processMessages,
+      setProcessMessages(prev => [
+        ...prev,
         { role: 'user', content: followUpText },
         { role: 'assistant', content: responseText }
       ]);
       setFollowUpText('');
     } catch (err) {
-      toast.error('Ошибка диалога: ' + err.message);
+      handleError(err, 'Диалог с Ассистентом');
     } finally {
       setIsProcessGenerating(false);
     }
   };
 
-  // 🔥 СОХРАНЕНИЕ РЕГЛАМЕНТА (SOP)
   const handleSaveToSOP = async (content) => {
     toast.info('Генерация названия для регламента...');
     try {
@@ -765,7 +823,7 @@ export default function App() {
       updateWorkspace({ sops: [newSOP, ...sops] });
       toast.success('Документ сохранен в Базу Регламентов!');
     } catch (err) {
-      toast.error('Ошибка сохранения регламента');
+      handleError(err, 'Сохранение регламента');
     }
   };
 
@@ -803,87 +861,61 @@ export default function App() {
     };
 
     if (selectedTask) {
-      updateWorkspace({ tasks: tasks.map(t => t.id === selectedTask.id ? taskObj : t) });
+      updateWorkspace({ tasks: tasks.map(tItem => tItem.id === selectedTask.id ? taskObj : tItem) });
       toast.success('Задача обновлена');
     } else {
       updateWorkspace({ tasks: [taskObj, ...tasks] });
       toast.success('Новая задача создана');
-      
       notifyTelegram(`📝 Новая задача: ${newTaskTitle}\nПриоритет: ${newUrgent ? 'Срочно' : 'Обычный'}`);
-    }
-    if (!selectedTask) {
       processTaskAutomations('task_created', taskObj);
     }
 
     closeModal();
   };
 
-const handleQuickMove = (taskId, newStatus) => {
-    const task = tasks.find(t => t.id === taskId);
+  // 🔥 Исправленный handleQuickMove с восстановлением из архива и без дубликатов
+  const handleQuickMove = useCallback((taskId, newStatus) => {
+    const task = tasks.find(tItem => tItem.id === taskId) || archive.find(tItem => tItem.id === taskId);
     if (!task) return;
 
-    // 🔥 Вызов автоматизации (вставляем сразу после проверки задачи)
+    // Восстановление задачи из архива
+    if (newStatus === 'todo' && task.status === 'done') {
+      updateWorkspace({
+        tasks: [{ ...task, status: 'todo' }, ...tasks],
+        archive: archive.filter(tItem => tItem.id !== taskId)
+      });
+      toast.success('Задача восстановлена из архива');
+      return;
+    }
+
     processTaskAutomations('status_changed', { ...task, status: newStatus });
 
-    // Уведомления в Telegram
     if (newStatus === 'review') {
       notifyTelegram(`👀 Задача на проверке:\n«${task.text}»\nИсполнитель: ${task.assigneeName || 'Владелец'}`);
     } else if (newStatus === 'done') {
       notifyTelegram(`✅ Задача выполнена:\n«${task.text}»`);
     }
 
-    // Обновление состояния и перенос в архив
     if (newStatus === 'done') {
       updateWorkspace({
-        tasks: tasks.filter(t => t.id !== taskId),
+        tasks: tasks.filter(tItem => tItem.id !== taskId),
         archive: [{ ...task, status: 'done' }, ...archive]
       });
       toast.success('Задача перенесена в Архив');
     } else {
       updateWorkspace({
-        tasks: tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t)
+        tasks: tasks.map(tItem => tItem.id === taskId ? { ...tItem, status: newStatus } : tItem)
       });
     }
-  };
-
-    if (newStatus === 'done') {
-      updateWorkspace({
-        tasks: tasks.filter(t => t.id !== taskId),
-        archive: [{ ...task, status: 'done' }, ...archive]
-      });
-      toast.success('Задача перенесена в Архив');
-    } else {
-      updateWorkspace({
-        tasks: tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t)
-      });
-    }
-  };
-  const handleApplyTemplate = (template) => {
-    const newTasks = template.tasks.map((t, idx) => ({
-      id: Date.now() + idx,
-      text: t.text,
-      description: t.description || '',
-      estimatedHours: t.estimatedHours || 1,
-      dueDate: '',
-      urgent: t.urgent || false,
-      important: t.important || false,
-      status: 'todo',
-      assigneeName: isTeamMode ? 'Владелец' : null
-    }));
-
-    updateWorkspace({ tasks: [...newTasks, ...tasks] });
-    toast.success(`Пакет "${template.name}" добавлен на доску (${newTasks.length} задач)`);
-    notifyTelegram(`📦 Добавлен пакет задач "${template.name}"`);
-    setIsCreateOpen(false);
-  };
+  }, [tasks, archive, updateWorkspace, notifyTelegram, processTaskAutomations]);
 
   const handleDeleteTask = (taskId) => {
-    updateWorkspace({ tasks: tasks.filter(t => t.id !== taskId) });
+    updateWorkspace({ tasks: tasks.filter(tItem => tItem.id !== taskId) });
     toast.success('Задача удалена');
     closeModal();
   };
 
-  const openTaskModal = (task = null) => {
+  const openTaskModal = useCallback((task = null) => {
     if (task) {
       setSelectedTask(task);
       setNewTaskTitle(task.text);
@@ -902,23 +934,33 @@ const handleQuickMove = (taskId, newStatus) => {
       setNewImportant(false);
     }
     setIsCreateOpen(true);
-  };
+  }, []);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setIsCreateOpen(false);
     setSelectedTask(null);
-  };
+  }, []);
 
+  // 🔥 Сохранение настроек с удержанием массива автоматизаций
   const handleSaveSettings = async () => {
     const isTeam = onboardTeam !== '👤 Я один';
-    await setDoc(doc(db, 'users', user.uid), {
-      settings: { ...docData?.settings, isTeamMode: isTeam, teamSize: onboardTeam, telegramChatId: tgChatId }
-    }, { merge: true });
-    setShowOnboarding(false);
-    toast.success('Настройки сохранены');
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        settings: { 
+          ...docData?.settings, 
+          isTeamMode: isTeam, 
+          teamSize: onboardTeam, 
+          telegramChatId: tgChatId,
+          automations: docData?.settings?.automations || defaultAutomations
+        }
+      }, { merge: true });
+      setShowOnboarding(false);
+      toast.success('Настройки сохранены');
+    } catch (err) {
+      handleError(err, 'Сохранение настроек');
+    }
   };
 
-  // Цвета темы
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
   const cardBg = isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200';
   const textMain = isDark ? 'text-white' : 'text-slate-900';
@@ -1071,7 +1113,7 @@ const handleQuickMove = (taskId, newStatus) => {
           </div>
         </header>
 
-        {/* МОБИЛЬНЫЕ ВКЛАДКИ (Команда, Сводка, Архив) */}
+        {/* МОБИЛЬНЫЕ ВКЛАДКИ */}
         <div className="md:hidden flex items-center gap-2 overflow-x-auto pb-4 mb-2" style={{ scrollbarWidth: 'none' }}>
           {isTeamMode && (
             <>
@@ -1110,7 +1152,7 @@ const handleQuickMove = (taskId, newStatus) => {
                   Все ({tasks.length})
                 </button>
                 {assistants.map(ast => {
-                  const count = tasks.filter(t => t.assigneeName === ast.name).length;
+                  const count = tasks.filter(tItem => tItem.assigneeName === ast.name).length;
                   return (
                     <button 
                       key={ast.id} 
@@ -1125,14 +1167,14 @@ const handleQuickMove = (taskId, newStatus) => {
             )}
 
             <div className={`grid grid-cols-1 ${isTeamMode ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
-              <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
-              <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
+              <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
+              <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
               
               {isTeamMode && (
-                <TaskColumn title={t('colReview')} colorClass="bg-amber-500" tasks={reviewTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
+                <TaskColumn title={t('colReview')} colorClass="bg-amber-500" tasks={reviewTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
               )}
               
-              <TaskColumn title={t('colDeferred')} colorClass="bg-slate-600" tasks={deferredTasks} isTeamMode={isTeamMode} isDark={isDark} t={t} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
+              <TaskColumn title={t('colDeferred')} colorClass="bg-slate-600" tasks={deferredTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
             </div>
           </div>
         )}
@@ -1266,8 +1308,8 @@ const handleQuickMove = (taskId, newStatus) => {
 
             <div className="space-y-3">
               {assistants.map(ast => {
-                const activeTasksCount = tasks.filter(t => t.assigneeName === ast.name && t.status !== 'done').length;
-                const totalHours = tasks.filter(t => t.assigneeName === ast.name && t.status !== 'done').reduce((acc, curr) => acc + (parseFloat(curr.estimatedHours) || 0), 0);
+                const activeTasksCount = tasks.filter(tItem => tItem.assigneeName === ast.name && tItem.status !== 'done').length;
+                const totalHours = tasks.filter(tItem => tItem.assigneeName === ast.name && tItem.status !== 'done').reduce((acc, curr) => acc + (parseFloat(curr.estimatedHours) || 0), 0);
 
                 return (
                   <div key={ast.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
@@ -1363,6 +1405,26 @@ const handleQuickMove = (taskId, newStatus) => {
               <button onClick={closeModal} className="text-slate-400 text-lg font-bold hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
+            {/* БЛОК БЫСТРЫХ ШАБЛОНОВ */}
+            {!selectedTask && (
+              <div className="mb-4">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Быстрый запуск пакета задач</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {taskTemplates.map((tmpl) => (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      onClick={() => handleApplyTemplate(tmpl)}
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-slate-400 text-left text-xs font-semibold flex items-center gap-2 transition-all active:scale-95"
+                    >
+                      <span className="text-base">{tmpl.icon}</span>
+                      <span className="truncate">{tmpl.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSaveTask} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Название задачи</label>
@@ -1391,23 +1453,6 @@ const handleQuickMove = (taskId, newStatus) => {
                   <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Чек-лист ИИ
                   </button>
-                </div>
-              </div>
-              {/* БЛОК БЫСТРЫХ ШАБЛОНОВ */}
-              <div className="mb-4">
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Быстрый запуск пакета задач</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {taskTemplates.map((tmpl) => (
-                    <button
-                      key={tmpl.id}
-                      type="button"
-                      onClick={() => handleApplyTemplate(tmpl)}
-                      className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-slate-400 text-left text-xs font-semibold flex items-center gap-2 transition-all active:scale-95"
-                    >
-                      <span className="text-base">{tmpl.icon}</span>
-                      <span className="truncate">{tmpl.name}</span>
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -1514,7 +1559,7 @@ const handleQuickMove = (taskId, newStatus) => {
               ))}
             </div>
 
-            {/* БЛОК АВТОМАТИЗАЦИЙ (ЭТАП 3) */}
+            {/* БЛОК АВТОМАТИЗАЦИЙ */}
             <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
               <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Правила автоматизаций</label>
               <div className="space-y-2">
