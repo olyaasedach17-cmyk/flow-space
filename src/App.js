@@ -66,6 +66,22 @@ const defaultKpis = [
   { id: 2, name: 'Качество (без возвратов)', weight: 35, max: 100, score: 88, desc: 'Задачи, принятые руководителем с первого раза.' },
   { id: 3, name: 'Инициативность', weight: 25, max: 5, score: 4, desc: 'Самостоятельное решение проблем.' },
 ];
+const defaultAutomations = [
+  {
+    id: 'auto_urgent_tg',
+    name: 'Срочная задача ➔ Алерт в Telegram',
+    event: 'task_created',
+    condition: 'is_urgent',
+    enabled: true
+  },
+  {
+    id: 'auto_review_notify',
+    name: 'Перевод «На проверку» ➔ Уведомление',
+    event: 'status_changed',
+    targetStatus: 'review',
+    enabled: true
+  }
+];
 
 const aiOptions = [
   { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Посты, статьи)' },
@@ -382,6 +398,27 @@ export default function App() {
     } catch (error) {
       console.error('Ошибка отправки в Telegram:', error);
     }
+  };
+  const processTaskAutomations = (event, taskData) => {
+    const rules = docData?.settings?.automations || defaultAutomations;
+
+    rules.forEach((rule) => {
+      if (!rule.enabled) return;
+
+      // Правило 1: Создание срочной задачи
+      if (event === 'task_created' && rule.event === 'task_created') {
+        if (rule.condition === 'is_urgent' && taskData.urgent) {
+          notifyTelegram(`⚡ [АВТОМАТИЗАЦИЯ]: Создана срочная задача «${taskData.text}»!`);
+        }
+      }
+
+      // Правило 2: Изменение статуса на "На проверке"
+      if (event === 'status_changed' && rule.event === 'status_changed') {
+        if (taskData.status === rule.targetStatus) {
+          notifyTelegram(`⚡ [АВТОМАТИЗАЦИЯ]: Задача «${taskData.text}» требует проверки руководителем.`);
+        }
+      }
+    });
   };
 
   const handleAuth = async (e) => {
@@ -774,19 +811,40 @@ export default function App() {
       
       notifyTelegram(`📝 Новая задача: ${newTaskTitle}\nПриоритет: ${newUrgent ? 'Срочно' : 'Обычный'}`);
     }
+    if (!selectedTask) {
+      processTaskAutomations('task_created', taskObj);
+    }
 
     closeModal();
   };
 
-  const handleQuickMove = (taskId, newStatus) => {
+const handleQuickMove = (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
+    // 🔥 Вызов автоматизации (вставляем сразу после проверки задачи)
+    processTaskAutomations('status_changed', { ...task, status: newStatus });
+
+    // Уведомления в Telegram
     if (newStatus === 'review') {
       notifyTelegram(`👀 Задача на проверке:\n«${task.text}»\nИсполнитель: ${task.assigneeName || 'Владелец'}`);
     } else if (newStatus === 'done') {
       notifyTelegram(`✅ Задача выполнена:\n«${task.text}»`);
     }
+
+    // Обновление состояния и перенос в архив
+    if (newStatus === 'done') {
+      updateWorkspace({
+        tasks: tasks.filter(t => t.id !== taskId),
+        archive: [{ ...task, status: 'done' }, ...archive]
+      });
+      toast.success('Задача перенесена в Архив');
+    } else {
+      updateWorkspace({
+        tasks: tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t)
+      });
+    }
+  };
 
     if (newStatus === 'done') {
       updateWorkspace({
@@ -1456,7 +1514,20 @@ export default function App() {
               ))}
             </div>
 
-            {/* БЛОК АКТИВАЦИИ ПРОМОКОДА ПАРТНЕРА (ВОССТАНОВЛЕН) */}
+            {/* БЛОК АВТОМАТИЗАЦИЙ (ЭТАП 3) */}
+            <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
+              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Правила автоматизаций</label>
+              <div className="space-y-2">
+                {defaultAutomations.map((rule) => (
+                  <div key={rule.id} className="p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{rule.name}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold">Активно</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* БЛОК АКТИВАЦИИ ПРОМОКОДА ПАРТНЕРА */}
             <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
               <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
                 <Tag className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Промокод партнера
