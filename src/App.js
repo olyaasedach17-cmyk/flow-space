@@ -74,6 +74,46 @@ const aiOptions = [
   { id: 'consultant', icon: '🧠', label: 'Консультант (Стратегия)' },
   { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' }
 ];
+const taskTemplates = [
+  {
+    id: 'marketing',
+    name: 'Маркетинг',
+    icon: '📲',
+    tasks: [
+      { text: 'Разработать контент-план на месяц', estimatedHours: 3, urgent: false, important: true, description: 'Составить сетку публикаций, темы и дедлайны.' },
+      { text: 'Написать рекламный пост для соцсетей', estimatedHours: 1, urgent: true, important: false, description: 'Подготовить текст с призывом к действию.' },
+      { text: 'Настроить таргетированную рекламу', estimatedHours: 4, urgent: true, important: true, description: 'Собрать аудитории и запустить кампанию.' }
+    ]
+  },
+  {
+    id: 'sales',
+    name: 'Продажи',
+    icon: '💼',
+    tasks: [
+      { text: 'Обновить скрипты звонков', estimatedHours: 2, urgent: false, important: true, description: 'Прописать ответы на частые возражения.' },
+      { text: 'Подготовить КП для ключевого клиента', estimatedHours: 2, urgent: true, important: true, description: 'Сформировать индивидуальные условия.' },
+      { text: 'Провести аудит сделок в CRM', estimatedHours: 3, urgent: false, important: false, description: 'Проверить зависшие лиды.' }
+    ]
+  },
+  {
+    id: 'dev',
+    name: 'IT / Разработка',
+    icon: '⚡',
+    tasks: [
+      { text: 'Провести рефакторинг кода', estimatedHours: 4, urgent: false, important: true, description: 'Оптимизировать производительность.' },
+      { text: 'Настроить мониторинг ошибок', estimatedHours: 2, urgent: true, important: true, description: 'Подключить алерты.' }
+    ]
+  },
+  {
+    id: 'legal',
+    name: 'Юриспруденция',
+    icon: '👔',
+    tasks: [
+      { text: 'Составить договор оказания услуг', estimatedHours: 3, urgent: true, important: true, description: 'Подготовить типовую форму.' },
+      { text: 'Проверить политику конфиденциальности', estimatedHours: 2, urgent: false, important: true, description: 'Актуализировать данные на сайте.' }
+    ]
+  }
+];
 
 // Премиальные стили кнопок
 const btnPrimary = "bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 transition-all shadow-md";
@@ -760,6 +800,24 @@ export default function App() {
       });
     }
   };
+  const handleApplyTemplate = (template) => {
+    const newTasks = template.tasks.map((t, idx) => ({
+      id: Date.now() + idx,
+      text: t.text,
+      description: t.description || '',
+      estimatedHours: t.estimatedHours || 1,
+      dueDate: '',
+      urgent: t.urgent || false,
+      important: t.important || false,
+      status: 'todo',
+      assigneeName: isTeamMode ? 'Владелец' : null
+    }));
+
+    updateWorkspace({ tasks: [...newTasks, ...tasks] });
+    toast.success(`Пакет "${template.name}" добавлен на доску (${newTasks.length} задач)`);
+    notifyTelegram(`📦 Добавлен пакет задач "${template.name}"`);
+    setIsCreateOpen(false);
+  };
 
   const handleDeleteTask = (taskId) => {
     updateWorkspace({ tasks: tasks.filter(t => t.id !== taskId) });
@@ -1275,6 +1333,23 @@ export default function App() {
                   <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Чек-лист ИИ
                   </button>
+                </div>
+              </div>
+              {/* БЛОК БЫСТРЫХ ШАБЛОНОВ */}
+              <div className="mb-4">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Быстрый запуск пакета задач</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {taskTemplates.map((tmpl) => (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      onClick={() => handleApplyTemplate(tmpl)}
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-slate-400 text-left text-xs font-semibold flex items-center gap-2 transition-all active:scale-95"
+                    >
+                      <span className="text-base">{tmpl.icon}</span>
+                      <span className="truncate">{tmpl.name}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
