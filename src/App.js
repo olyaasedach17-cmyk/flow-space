@@ -29,7 +29,6 @@ import {
   Settings, 
   Globe, 
   Clock, 
-  ArrowRight, 
   X, 
   CheckCircle2, 
   LogOut,
@@ -39,7 +38,8 @@ import {
   Mic,
   BookOpen,
   Copy,
-  MessageCircle
+  MessageCircle,
+  ChevronRight
 } from 'lucide-react';
 
 // ==========================================
@@ -47,17 +47,10 @@ import {
 // ==========================================
 const translations = {
   ru: {
-    loginTitle: 'Flow Space Enterprise',
-    board: 'Задачи',
-    analytics: 'Аналитика',
-    team: 'Команда',
-    archiveTab: 'Архив',
-    aiProcesses: 'Ассистент',
     colTodo: 'Нужно сделать',
     colInProgress: 'В процессе',
     colReview: 'На проверке',
     colDeferred: 'Отложено',
-    empty: 'Задач пока нет',
   }
 };
 
@@ -68,11 +61,11 @@ const defaultKpis = [
 ];
 
 const aiOptions = [
-  { id: 'copywriter', icon: '✍️', label: 'Копирайтер (Посты, статьи)' },
-  { id: 'smm', icon: '📲', label: 'Маркетолог (Контент, идеи)' },
-  { id: 'sales', icon: '💼', label: 'Продажи (Скрипты)' },
-  { id: 'consultant', icon: '🧠', label: 'Консультант (Стратегия)' },
-  { id: 'lawyer', icon: '👔', label: 'Юрист (Договоры, регламенты)' }
+  { id: 'copywriter', icon: '✍️', label: 'Копирайтер' },
+  { id: 'smm', icon: '📲', label: 'Маркетолог' },
+  { id: 'sales', icon: '💼', label: 'Продажи' },
+  { id: 'consultant', icon: '🧠', label: 'Стратег' },
+  { id: 'lawyer', icon: '👔', label: 'Юрист' }
 ];
 
 const taskTemplates = [
@@ -133,7 +126,7 @@ const defaultAutomations = [
   }
 ];
 
-const btnPrimary = "bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 transition-all shadow-md";
+const btnPrimary = "bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 transition-all shadow-sm font-bold active:scale-[0.98]";
 
 const handleError = (error, context = 'Операция') => {
   console.error(`Error in ${context}:`, error);
@@ -176,63 +169,63 @@ async function callServerAI(endpointData) {
 // ==========================================
 const TaskCard = React.memo(({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) => {
   const cardBase = task.urgent 
-    ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50/70 border-red-200')
-    : (isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200');
+    ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50/80 border-red-200/80')
+    : (isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200/80 shadow-sm');
 
   const textMain = isDark ? 'text-slate-100' : 'text-slate-900';
 
   return (
     <div 
       onClick={() => onSelectTask(task)}
-      className={`p-4 rounded-2xl border transition-all shadow-sm cursor-pointer hover:border-slate-400/50 active:scale-[0.99] ${cardBase}`}
+      className={`p-4 rounded-2xl border transition-all cursor-pointer hover:border-slate-400/50 active:scale-[0.99] ${cardBase}`}
     >
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-start gap-2">
-          <span className={`text-sm font-semibold leading-snug ${textMain}`}>{task.text}</span>
+          <span className={`text-sm font-semibold leading-snug tracking-tight ${textMain}`}>{task.text}</span>
         </div>
 
         {task.description && (
-          <p className={`text-xs line-clamp-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          <p className={`text-xs line-clamp-2 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             {task.description}
           </p>
         )}
 
         <div className="flex flex-wrap gap-1.5 items-center mt-1">
           {task.urgent && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-red-500/10 text-red-500 border border-red-500/20">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-red-500/10 text-red-500 border border-red-500/20">
               <Flame className="w-3 h-3" /> Срочно
             </span>
           )}
           {task.important && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20">
               <Gem className="w-3 h-3" /> Важно
             </span>
           )}
           {task.estimatedHours > 0 && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/15">
               <Clock className="w-3 h-3" /> {task.estimatedHours}ч
             </span>
           )}
           {task.dueDate && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/15">
               <Calendar className="w-3 h-3" /> {task.dueDate}
             </span>
           )}
         </div>
 
         {isTeamMode && task.assigneeName && (
-          <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-1 bg-slate-100 dark:bg-white/5 w-fit px-2 py-0.5 rounded-md">
             <User className="w-3 h-3" /> {task.assigneeName}
           </div>
         )}
       </div>
 
-      <div className="flex justify-between items-center pt-3 mt-3 border-t border-slate-100 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex gap-1.5">
+      <div className="flex justify-between items-center pt-3 mt-3 border-t border-slate-100 dark:border-white/5">
+        <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
           {task.status === 'todo' && (
             <button 
               onClick={() => onQuickMove(task.id, 'in_progress')} 
-              className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20 transition-colors"
+              className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20 transition-colors"
             >
               В работу
             </button>
@@ -241,14 +234,14 @@ const TaskCard = React.memo(({ task, isTeamMode, isDark, onSelectTask, onQuickMo
             isTeamMode ? (
               <button 
                 onClick={() => onQuickMove(task.id, 'review')} 
-                className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20 transition-colors"
+                className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
               >
                 На проверку
               </button>
             ) : (
               <button 
                 onClick={() => onQuickMove(task.id, 'done')} 
-                className={`text-[11px] font-bold px-3 py-1.5 rounded-lg ${btnPrimary}`}
+                className={`text-[11px] font-bold px-3 py-1.5 rounded-xl ${btnPrimary}`}
               >
                 Готово ✓
               </button>
@@ -257,15 +250,23 @@ const TaskCard = React.memo(({ task, isTeamMode, isDark, onSelectTask, onQuickMo
           {task.status === 'review' && isTeamMode && (
             <button 
               onClick={() => onQuickMove(task.id, 'done')} 
-              className={`text-[11px] font-bold px-3 py-1.5 rounded-lg ${btnPrimary}`}
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-xl ${btnPrimary}`}
             >
               Принять ✓
             </button>
           )}
         </div>
-        <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-          Детали <ArrowRight className="w-2.5 h-2.5" />
-        </span>
+
+        <button 
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectTask(task);
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-0.5 font-bold transition-colors py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 active:scale-95"
+        >
+          Детали <ChevronRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
@@ -277,12 +278,12 @@ const TaskColumn = React.memo(({ title, colorClass, tasks, isTeamMode, isDark, o
       <div className="flex items-center gap-2 mb-3 px-1">
         <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`}></span>
         <h3 className={`font-bold text-xs uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          {title} <span className="text-slate-400 font-normal ml-1">({tasks.length})</span>
+          {title} <span className="text-slate-400 font-normal ml-0.5">({tasks.length})</span>
         </h3>
       </div>
       <div className="space-y-3 grow">
         {tasks.length === 0 ? (
-          <div className={`text-center py-6 rounded-2xl border border-dashed text-xs ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
+          <div className={`text-center py-8 rounded-2xl border border-dashed text-xs font-medium ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
             Задач пока нет
           </div>
         ) : (
@@ -492,7 +493,7 @@ export default function App() {
   const isPro = useMemo(() => docData?.isPro || !!docData?.appliedPromo, [docData]);
   const isTeamMode = useMemo(() => docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один'), [docData, onboardTeam]);
 
-  // Мемоизированная фильтрация по исполнителям и статусам
+  // Фильтрация с мемоизацией
   const filteredTasks = useMemo(() => {
     return assigneeFilter === 'all' 
       ? tasks 
@@ -533,7 +534,6 @@ export default function App() {
     }, { merge: true }).catch(err => handleError(err, 'Сохранение рабочей области'));
   }, [user, docData, currentAssistantId, currentWorkspace]);
 
-  // 🔥 Применение шаблона с валидацией
   const handleApplyTemplate = useCallback((template) => {
     try {
       if (!template || !template.tasks || template.tasks.length === 0) {
@@ -553,7 +553,7 @@ export default function App() {
       }));
 
       updateWorkspace({ tasks: [...newTasks, ...tasks] });
-      toast.success(`Пакет "${template.name}" добавлен на доску (${newTasks.length} задач)`);
+      toast.success(`Пакет "${template.name}" добавлен (${newTasks.length} задач)`);
       notifyTelegram(`📦 Добавлен пакет задач "${template.name}"`);
       setIsCreateOpen(false);
     } catch (error) {
@@ -586,7 +586,7 @@ export default function App() {
       setIsInviteOpen(false); 
       setInviteEmail(''); 
       setInvitePosition('');
-      toast.success(`Сотрудник ${inviteEmail} успешно добавлен в команду!`);
+      toast.success(`Сотрудник ${inviteEmail} добавлен в команду!`);
     } catch (err) {
       handleError(err, 'Приглашение сотрудника');
     }
@@ -613,7 +613,7 @@ export default function App() {
     
     recognition.onresult = async (event) => {
       const transcript = event.results[0][0].transcript;
-      toast.info('🎙 Обработка голоса ИИ...', { duration: 4000 });
+      toast.info('🎙 Распознавание ИИ...', { duration: 3000 });
       setIsListening(false);
 
       try {
@@ -641,7 +641,7 @@ export default function App() {
         }));
 
         updateWorkspace({ tasks: [...newTasks, ...tasks] });
-        toast.success(`Успешно создано задач: ${newTasks.length}`);
+        toast.success(`Создано задач: ${newTasks.length}`);
         
         notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
         setIsCreateOpen(false);
@@ -687,7 +687,7 @@ export default function App() {
           assigneeName: isTeamMode ? aiResult.assignee : null
         } : tItem)
       });
-      toast.success('Агент успешно расписал задачу!');
+      toast.success('Агент оформил задачу!');
     } catch (error) {
       handleError(error, 'Запуск Умного Агента');
     } finally {
@@ -698,7 +698,7 @@ export default function App() {
   const handleGenerateTeamReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const prompt = `Проанализируй состояние команды: Всего задач: ${tasks.length}, В работе: ${inProgressTasks.length}, На проверке: ${reviewTasks.length}. Напиши строгую бизнес-сводку для инвестора/владельца из 3 пунктов: 1. Статус производства, 2. Риски, 3. Решение.`;
+      const prompt = `Проанализируй состояние команды: Всего задач: ${tasks.length}, В работе: ${inProgressTasks.length}, На проверке: ${reviewTasks.length}. Напиши строгую бизнес-сводку для владельца из 3 пунктов: 1. Статус производства, 2. Риски, 3. Решение.`;
       const data = await callServerAI({
         model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: prompt }],
@@ -714,8 +714,8 @@ export default function App() {
   };
 
   const handleCopyReport = () => {
-    navigator.clipboard.writeText(`📊 ОТЧЕТ ПО ПРОЕКТУ\n\n${teamReport}\n\nСформировано в Flow Space ИИ.`);
-    toast.success('Отчет скопирован в буфер обмена!');
+    navigator.clipboard.writeText(`📊 ОТЧЕТ ПО ПРОЕКТУ\n\n${teamReport}\n\nСформировано в Flow Space Enterprise.`);
+    toast.success('Отчет скопирован!');
   };
 
   const handleTaskAI = async (mode) => {
@@ -737,7 +737,7 @@ export default function App() {
       setNewTaskDesc(data.choices[0].message.content.trim());
       toast.success('Текст сформирован');
     } catch (err) {
-      handleError(err, 'ИИ Генератор задач');
+      handleError(err, 'ИИ Генератор');
     } finally {
       setIsTaskGenerating(false);
     }
@@ -749,7 +749,7 @@ export default function App() {
     try {
       const systemPrompt = aiOptions.find(o => o.id === processRole)?.label || 'Эксперт';
       const initialMessages = [
-        { role: 'system', content: `Ты — ${systemPrompt}. Давай структурированные ответы.` },
+        { role: 'system', content: `Ты — ${systemPrompt}. Давай четкие структурированные ответы.` },
         { role: 'user', content: processTopic }
       ];
 
@@ -804,7 +804,7 @@ export default function App() {
   };
 
   const handleSaveToSOP = async (content) => {
-    toast.info('Генерация названия для регламента...');
+    toast.info('Создание регламента...');
     try {
       const response = await callServerAI({
         model: 'gpt-4o-mini',
@@ -821,7 +821,7 @@ export default function App() {
       };
 
       updateWorkspace({ sops: [newSOP, ...sops] });
-      toast.success('Документ сохранен в Базу Регламентов!');
+      toast.success('Сохранено в Базу Регламентов!');
     } catch (err) {
       handleError(err, 'Сохранение регламента');
     }
@@ -841,7 +841,7 @@ export default function App() {
     setNewUrgent(false);
     setNewImportant(false);
     setIsCreateOpen(true);
-    toast.success('Заполнены данные для создания задачи');
+    toast.success('Заполнено для создания задачи');
   };
 
   const handleSaveTask = (e) => {
@@ -873,18 +873,16 @@ export default function App() {
     closeModal();
   };
 
-  // 🔥 Исправленный handleQuickMove с восстановлением из архива и без дубликатов
   const handleQuickMove = useCallback((taskId, newStatus) => {
     const task = tasks.find(tItem => tItem.id === taskId) || archive.find(tItem => tItem.id === taskId);
     if (!task) return;
 
-    // Восстановление задачи из архива
     if (newStatus === 'todo' && task.status === 'done') {
       updateWorkspace({
         tasks: [{ ...task, status: 'todo' }, ...tasks],
         archive: archive.filter(tItem => tItem.id !== taskId)
       });
-      toast.success('Задача восстановлена из архива');
+      toast.success('Задача восстановлена');
       return;
     }
 
@@ -901,7 +899,7 @@ export default function App() {
         tasks: tasks.filter(tItem => tItem.id !== taskId),
         archive: [{ ...task, status: 'done' }, ...archive]
       });
-      toast.success('Задача перенесена в Архив');
+      toast.success('Перенесено в Архив');
     } else {
       updateWorkspace({
         tasks: tasks.map(tItem => tItem.id === taskId ? { ...tItem, status: newStatus } : tItem)
@@ -941,7 +939,6 @@ export default function App() {
     setSelectedTask(null);
   }, []);
 
-  // 🔥 Сохранение настроек с удержанием массива автоматизаций
   const handleSaveSettings = async () => {
     const isTeam = onboardTeam !== '👤 Я один';
     try {
@@ -962,19 +959,22 @@ export default function App() {
   };
 
   const themeBg = isDark ? 'bg-[#0E1116] text-slate-200' : 'bg-[#F8FAFC] text-slate-800';
-  const cardBg = isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200';
+  const cardBg = isDark ? 'bg-[#161B22] border-white/10 shadow-sm' : 'bg-white border-slate-200/80 shadow-sm';
   const textMain = isDark ? 'text-white' : 'text-slate-900';
-  const inputBg = isDark ? 'bg-[#0E1116] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900';
+  const inputBg = isDark ? 'bg-[#0E1116] border-white/10 text-white placeholder:text-slate-600' : 'bg-slate-50 border-slate-200/80 text-slate-900 placeholder:text-slate-400';
 
   if (!user || !docData) return (
     <div className={`min-h-screen flex items-center justify-center p-4 font-sans ${themeBg}`}>
       <Toaster position="top-center" richColors />
-      <div className={`p-8 rounded-[32px] max-w-md w-full border ${cardBg}`}>
-        <h1 className={`text-2xl font-black text-center mb-6 tracking-tight ${textMain}`}>Flow Space</h1>
+      <div className={`p-8 rounded-3xl max-w-md w-full border ${cardBg}`}>
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-black text-lg shadow-md">FS</div>
+          <h1 className={`text-2xl font-black tracking-tight ${textMain}`}>Flow Space</h1>
+        </div>
         <form onSubmit={handleAuth} className="space-y-3">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border ${inputBg}`} />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border ${inputBg}`} />
-          <button type="submit" className={`w-full py-3.5 rounded-2xl font-bold ${btnPrimary}`}>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border text-sm ${inputBg}`} />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border text-sm ${inputBg}`} />
+          <button type="submit" className={`w-full py-3.5 rounded-2xl font-bold text-sm ${btnPrimary}`}>
             {isLogin ? 'Войти в систему' : 'Зарегистрироваться'}
           </button>
         </form>
@@ -982,17 +982,17 @@ export default function App() {
         <button 
           type="button" 
           onClick={signInWithGoogle} 
-          className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-transparent border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'}`}
+          className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-transparent border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'}`}
         >
           <Globe className="w-4 h-4 text-slate-900 dark:text-white" /> Войти через Google
         </button>
 
         <div className="mt-6 flex flex-col items-center gap-2">
-          <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white">
+          <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
             {isLogin ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти'}
           </button>
           {isLogin && (
-            <button type="button" onClick={handleResetPassword} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white">
+            <button type="button" onClick={handleResetPassword} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
               Забыли пароль?
             </button>
           )}
@@ -1002,11 +1002,11 @@ export default function App() {
   );
 
   return (
-    <div className={`min-h-screen font-sans pb-36 md:pb-8 md:pl-64 ${themeBg}`}>
+    <div className={`min-h-screen font-sans pb-36 md:pb-12 md:pl-64 ${themeBg}`}>
       <Toaster position="top-center" richColors />
       
       {/* ДЕСКТОПНОЕ МЕНЮ */}
-      <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-2 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200'}`}>
+      <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-1.5 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200/80'}`}>
         <div className="flex items-center justify-between mb-6 px-2">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-black text-sm shadow-md">FS</div>
@@ -1023,71 +1023,71 @@ export default function App() {
           <Plus className="w-4 h-4" /> Создать задачу
         </button>
 
-        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'matrix' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'matrix' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <LayoutDashboard className="w-4 h-4" /> Задачи
         </button>
-        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'processes' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'processes' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <Bot className="w-4 h-4" /> Ассистент
         </button>
-        <button onClick={() => setActiveTab('sops')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'sops' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+        <button onClick={() => setActiveTab('sops')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'sops' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <BookOpen className="w-4 h-4" /> Регламенты
         </button>
         
         {isTeamMode && (
           <>
-            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'team' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'team' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
               <Users className="w-4 h-4" /> Команда
             </button>
-            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'kpi' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'kpi' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
               <BarChart3 className="w-4 h-4" /> Сводка SLA
             </button>
           </>
         )}
 
-        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl font-bold text-sm transition-colors ${activeTab === 'archive' ? 'bg-slate-200 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
+        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'archive' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
           <FolderArchive className="w-4 h-4" /> Архив
         </button>
 
-        <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-2">
-          <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-500 px-2 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+        <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-1">
+          <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-500 px-2 py-2 w-full dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
             <Settings className="w-3.5 h-3.5" /> Настройки
           </button>
           <button onClick={() => signOut(auth)} className="flex items-center gap-2 w-full text-left px-2 py-2 text-xs font-bold text-red-500 hover:underline">
-            <LogOut className="w-3.5 h-3.5" /> Выйти из аккаунта
+            <LogOut className="w-3.5 h-3.5" /> Выйти
           </button>
         </div>
       </nav>
 
       {/* ПРЕМИАЛЬНАЯ МОБИЛЬНАЯ НАВИГАЦИЯ (ОСТРОВ) */}
-      <div className="md:hidden fixed bottom-6 left-4 right-4 z-40">
-        <div className={`flex justify-between items-center px-4 py-2.5 rounded-2xl shadow-2xl border ${isDark ? 'bg-[#1C2128]/95 border-white/10 shadow-black/50' : 'bg-white/95 border-slate-200 shadow-slate-300/60 backdrop-blur-md'}`}>
-          <button onClick={() => setActiveTab('matrix')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'matrix' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+      <div className="md:hidden fixed bottom-5 left-4 right-4 z-40">
+        <div className={`flex justify-between items-center px-4 py-2 rounded-2xl shadow-2xl border backdrop-blur-lg ${isDark ? 'bg-[#1C2128]/90 border-white/10 shadow-black/60' : 'bg-white/90 border-slate-200/80 shadow-slate-300/50'}`}>
+          <button onClick={() => setActiveTab('matrix')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'matrix' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
             <LayoutDashboard className="w-5 h-5" />
-            <span className="text-[9px] font-bold">Задачи</span>
+            <span className="text-[9px]">Задачи</span>
           </button>
-          <button onClick={() => setActiveTab('processes')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'processes' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+          <button onClick={() => setActiveTab('processes')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'processes' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
             <Bot className="w-5 h-5" />
-            <span className="text-[9px] font-bold">ИИ</span>
+            <span className="text-[9px]">ИИ</span>
           </button>
           
-          <button onClick={() => openTaskModal()} className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl active:scale-95 transition-transform shadow-lg ${isDark ? 'bg-white text-slate-900 shadow-white/10' : 'bg-slate-900 text-white shadow-slate-900/30'}`}>
-            <Plus className="w-6 h-6" />
+          <button onClick={() => openTaskModal()} className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-xl active:scale-95 transition-transform shadow-md ${isDark ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}`}>
+            <Plus className="w-5 h-5" />
           </button>
 
-          <button onClick={() => setActiveTab('sops')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'sops' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+          <button onClick={() => setActiveTab('sops')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'sops' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
             <BookOpen className="w-5 h-5" />
-            <span className="text-[9px] font-bold">База</span>
+            <span className="text-[9px]">База</span>
           </button>
 
           {isTeamMode ? (
-            <button onClick={() => setActiveTab('team')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'team' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+            <button onClick={() => setActiveTab('team')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'team' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
               <Users className="w-5 h-5" />
-              <span className="text-[9px] font-bold">Люди</span>
+              <span className="text-[9px]">Люди</span>
             </button>
           ) : (
-            <button onClick={() => setActiveTab('archive')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'archive' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+            <button onClick={() => setActiveTab('archive')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'archive' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
               <FolderArchive className="w-5 h-5" />
-              <span className="text-[9px] font-bold">Архив</span>
+              <span className="text-[9px]">Архив</span>
             </button>
           )}
         </div>
@@ -1096,41 +1096,54 @@ export default function App() {
       {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
         
-        <header className="flex justify-between items-start sm:items-center mb-4 pt-2">
+        <header className="flex justify-between items-center mb-4 pt-1">
           <div>
-            <h2 className={`text-xl font-black ${textMain}`}>
+            <h2 className={`text-xl font-black tracking-tight ${textMain}`}>
               {isTeamMode ? 'Командная доска' : 'Личное пространство'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">{isTeamMode ? 'Управление процессами' : 'Фокус на личных задачах'}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowOnboarding(true)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform">
+            <button onClick={() => setShowOnboarding(true)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform bg-white dark:bg-[#161B22]">
               <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             </button>
-            <button onClick={() => setIsDark(!isDark)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform">
-              {isDark ? <Sun className="w-4 h-4 text-slate-200" /> : <Moon className="w-4 h-4 text-slate-700" />}
+            <button onClick={() => setIsDark(!isDark)} className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-base shadow-sm active:scale-95 transition-transform bg-white dark:bg-[#161B22]">
+              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
             </button>
           </div>
         </header>
 
-        {/* МОБИЛЬНЫЕ ВКЛАДКИ */}
-        <div className="md:hidden flex items-center gap-2 overflow-x-auto pb-4 mb-2" style={{ scrollbarWidth: 'none' }}>
-          {isTeamMode && (
-            <>
-              <button onClick={() => setActiveTab('team')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'team' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400'}`}>👥 Команда</button>
-              <button onClick={() => setActiveTab('kpi')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'kpi' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400'}`}>📊 Сводка SLA</button>
-            </>
-          )}
-          <button onClick={() => setActiveTab('archive')} className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${activeTab === 'archive' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400'}`}>📦 Архив задач</button>
-        </div>
+        {/* ПЕРЕКЛЮЧАТЕЛЬ ДЛЯ КОМАНДНОГО РЕЖИМА НА МОБИЛЬНЫХ */}
+        {isTeamMode && (
+          <div className="md:hidden grid grid-cols-3 gap-1 p-1 bg-slate-200/60 dark:bg-white/5 rounded-xl mb-4 text-[11px] font-bold">
+            <button 
+              onClick={() => setActiveTab('matrix')} 
+              className={`py-2 rounded-lg transition-all ${activeTab === 'matrix' ? 'bg-white dark:bg-[#161B22] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}
+            >
+              Задачи
+            </button>
+            <button 
+              onClick={() => setActiveTab('team')} 
+              className={`py-2 rounded-lg transition-all ${activeTab === 'team' ? 'bg-white dark:bg-[#161B22] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}
+            >
+              Команда
+            </button>
+            <button 
+              onClick={() => setActiveTab('kpi')} 
+              className={`py-2 rounded-lg transition-all ${activeTab === 'kpi' ? 'bg-white dark:bg-[#161B22] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}
+            >
+              Сводка
+            </button>
+          </div>
+        )}
 
         {/* ВКЛАДКА: ЗАДАЧИ */}
         {activeTab === 'matrix' && (
-          <div className="space-y-6">
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+          <div className="space-y-4">
+            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-slate-50 border-slate-200/80'}`}>
               <div>
                 <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
-                  <Sparkles className="w-3.5 h-3.5" /> Умный Агент
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Умный Агент
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляет ТЗ.</p>
               </div>
@@ -1139,15 +1152,15 @@ export default function App() {
               </button>
             </div>
 
-            {/* ФИЛЬТР ПО СОТРУДНИКАМ */}
+            {/* ГОРИЗОНТАЛЬНЫЙ СКРОЛЛ ФИЛЬТРОВ ПО СОТРУДНИКАМ */}
             {isTeamMode && assistants.length > 1 && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 shrink-0 mr-1">
                   <Filter className="w-3 h-3" /> Фильтр:
                 </span>
                 <button 
                   onClick={() => setAssigneeFilter('all')} 
-                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === 'all' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 transition-all ${assigneeFilter === 'all' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 bg-white dark:bg-[#161B22]'}`}
                 >
                   Все ({tasks.length})
                 </button>
@@ -1157,9 +1170,9 @@ export default function App() {
                     <button 
                       key={ast.id} 
                       onClick={() => setAssigneeFilter(ast.name)} 
-                      className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${assigneeFilter === ast.name ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 transition-all flex items-center gap-1.5 ${assigneeFilter === ast.name ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 bg-white dark:bg-[#161B22]'}`}
                     >
-                      {ast.name} ({count})
+                      <User className="w-3 h-3 opacity-60" /> {ast.name} <span className="opacity-60 text-[10px]">({count})</span>
                     </button>
                   );
                 })}
@@ -1189,7 +1202,7 @@ export default function App() {
                   <button 
                     key={opt.id} 
                     onClick={() => setProcessRole(opt.id)}
-                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-slate-900 bg-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/5 opacity-70 text-slate-700 dark:text-slate-300'}`}
+                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-slate-900 bg-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/5 text-slate-700 dark:text-slate-300'}`}
                   >
                     <div className="text-lg mb-1">{opt.icon}</div>
                     {opt.label}
@@ -1228,13 +1241,13 @@ export default function App() {
                       <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
                         <button 
                           onClick={() => handleCreateTaskFromAI(msg.content)} 
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
+                          className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
                         >
                           <Plus className="w-3.5 h-3.5" /> В задачу
                         </button>
                         <button 
                           onClick={() => handleSaveToSOP(msg.content)} 
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
+                          className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
                         >
                           <BookOpen className="w-3.5 h-3.5" /> Сохранить регламент
                         </button>
@@ -1249,7 +1262,7 @@ export default function App() {
                     value={followUpText} 
                     onChange={(e) => setFollowUpText(e.target.value)} 
                     onKeyPress={(e) => e.key === 'Enter' && handleFollowUpProcess()}
-                    placeholder="Уточнить или попросить переделать..." 
+                    placeholder="Уточнить запрос..." 
                     className="flex-1 bg-transparent outline-none text-xs font-medium" 
                   />
                   <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className={`px-4 py-2.5 rounded-xl text-xs flex items-center gap-1 ${btnPrimary}`}>
@@ -1402,7 +1415,7 @@ export default function App() {
           <div className={`w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-6 border shadow-2xl max-h-[90vh] overflow-y-auto ${cardBg}`}>
             <div className="flex justify-between items-center mb-4">
               <h3 className={`text-base font-bold ${textMain}`}>{selectedTask ? 'Редактирование задачи' : 'Новая задача'}</h3>
-              <button onClick={closeModal} className="text-slate-400 text-lg font-bold hover:text-slate-200"><X className="w-5 h-5" /></button>
+              <button onClick={closeModal} className="text-slate-400 font-bold hover:text-slate-200"><X className="w-5 h-5" /></button>
             </div>
 
             {/* БЛОК БЫСТРЫХ ШАБЛОНОВ */}
@@ -1415,7 +1428,7 @@ export default function App() {
                       key={tmpl.id}
                       type="button"
                       onClick={() => handleApplyTemplate(tmpl)}
-                      className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-slate-400 text-left text-xs font-semibold flex items-center gap-2 transition-all active:scale-95"
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-slate-400 text-left text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 bg-slate-50 dark:bg-white/5"
                     >
                       <span className="text-base">{tmpl.icon}</span>
                       <span className="truncate">{tmpl.name}</span>
@@ -1447,10 +1460,10 @@ export default function App() {
                 </div>
                 
                 <div className="flex gap-2 mt-2">
-                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
-                    <Sparkles className="w-3.5 h-3.5" /> Расписать ИИ
+                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Расписать ИИ
                   </button>
-                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Чек-лист ИИ
                   </button>
                 </div>
@@ -1552,7 +1565,7 @@ export default function App() {
                 <button 
                   key={size} 
                   onClick={() => setOnboardTeam(size)}
-                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left ${onboardTeam === size ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}
+                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left transition-all ${onboardTeam === size ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5'}`}
                 >
                   {size}
                 </button>
