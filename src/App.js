@@ -1,227 +1,51 @@
+// ==========================================
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, db, googleProvider } from './firebase';
-import { 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  signInWithPopup, 
-  sendPasswordResetEmail 
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  signInWithPopup,
+  sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { Toaster, toast } from 'sonner';
-import { aiOptions, defaultAutomations, defaultKpis, taskTemplates, translations } from './config';
-import { 
-  Flame, 
-  Gem, 
-  Bot, 
-  User, 
-  Calendar, 
-  Plus, 
-  FolderArchive, 
-  BarChart3, 
-  Users, 
-  LayoutDashboard, 
-  Sun, 
-  Moon, 
-  Sparkles, 
-  Send, 
-  Trash2, 
-  Settings, 
-  Globe, 
-  Clock, 
-  X, 
-  CheckCircle2, 
-  LogOut,
-  Filter,
-  Tag,
-  Award,
-  Mic,
-  BookOpen,
-  Copy,
-  MessageCircle,
-  ChevronRight
-} from 'lucide-react';
+import { Sun, Moon, Settings } from 'lucide-react';
 
-// ==========================================
-// 1. КОНСТАНТЫ И НАСТРОЙКИ
-// ==========================================
-const btnPrimary = "bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 transition-all shadow-sm font-bold active:scale-[0.98]";
+// Компоненты UI
+import AuthView from './components/auth/AuthView';
+import AssistantView from './components/automation/AssistantView';
+import SopView from './components/automation/SopView';
+import InviteModal from './components/company/InviteModal';
+import KpiView from './components/company/KpiView';
+import TeamView from './components/company/TeamView';
+import MobileNav from './components/layout/MobileNav';
+import Sidebar from './components/layout/Sidebar';
+import OnboardingModal from './components/settings/OnboardingModal';
+import SettingsModal from './components/settings/SettingsModal';
+import ArchiveView from './components/tasks/ArchiveView';
+import MatrixView from './components/tasks/MatrixView';
+import TaskModal from './components/tasks/TaskModal';
 
-const handleError = (error, context = 'Операция') => {
-  console.error(`Error in ${context}:`, error);
-  if (error?.code === 'permission-denied') {
-    toast.error('У вас нет прав для выполнения этой операции');
-  } else if (error?.code === 'unavailable') {
-    toast.error('Сервис временно недоступен. Проверьте подключение к сети');
-  } else {
-    toast.error(`${context}: ${error.message || 'Неизвестная ошибка'}`);
-  }
-};
+// Сервисы и утилиты
+import { WORKSPACES, ROLES, filterTasksByRole } from './utils/workspaceUtils';
+import { sendTelegramAlert, copyToClipboard } from './services/notificationService';
+import { callServerAI, safeParseAIJSON } from './services/aiService';
+import { runTaskAutomations } from './utils/automations';
+import { calculateCompanyMetrics } from './utils/analytics';
+import { normalizeTask, createNormalizedTask } from './utils/taskUtils';
+import {
+  translations,
+  defaultKpis,
+  aiOptions,
+  taskTemplates,
+  defaultAutomations,
+  btnPrimary,
+  handleError
+} from './constants';
 
-const safeParseAIJSON = (rawContent) => {
-  let cleaned = rawContent.trim();
-  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/```json/g, '').replace(/```/g, '').trim();
-  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/```/g, '').trim();
-  const parsed = JSON.parse(cleaned);
-  if (!Array.isArray(parsed)) {
-    throw new Error('Ответ от AI не является валидным списком задач');
-  }
-  return parsed;
-};
 
-async function callServerAI(endpointData) {
-  const response = await fetch('/api/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(endpointData)
-  });
-  
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || `Ошибка сервера: ${response.status}`);
-  }
-  return data;
-}
-
-// ==========================================
-// 2. КАРТОЧКА И КОЛОНКА ЗАДАЧ
-// ==========================================
-const TaskCard = React.memo(({ task, isTeamMode, isDark, onSelectTask, onQuickMove }) => {
-  const cardBase = task.urgent 
-    ? (isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50/80 border-red-200/80')
-    : (isDark ? 'bg-[#161B22] border-white/10' : 'bg-white border-slate-200/80 shadow-sm');
-
-  const textMain = isDark ? 'text-slate-100' : 'text-slate-900';
-
-  return (
-    <div 
-      onClick={() => onSelectTask(task)}
-      className={`p-4 rounded-2xl border transition-all cursor-pointer hover:border-slate-400/50 active:scale-[0.99] ${cardBase}`}
-    >
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-start gap-2">
-          <span className={`text-sm font-semibold leading-snug tracking-tight ${textMain}`}>{task.text}</span>
-        </div>
-
-        {task.description && (
-          <p className={`text-xs line-clamp-2 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            {task.description}
-          </p>
-        )}
-
-        <div className="flex flex-wrap gap-1.5 items-center mt-1">
-          {task.urgent && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-red-500/10 text-red-500 border border-red-500/20">
-              <Flame className="w-3 h-3" /> Срочно
-            </span>
-          )}
-          {task.important && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20">
-              <Gem className="w-3 h-3" /> Важно
-            </span>
-          )}
-          {task.estimatedHours > 0 && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/15">
-              <Clock className="w-3 h-3" /> {task.estimatedHours}ч
-            </span>
-          )}
-          {task.dueDate && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/15">
-              <Calendar className="w-3 h-3" /> {task.dueDate}
-            </span>
-          )}
-        </div>
-
-        {isTeamMode && task.assigneeName && (
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-1 bg-slate-100 dark:bg-white/5 w-fit px-2 py-0.5 rounded-md">
-            <User className="w-3 h-3" /> {task.assigneeName}
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-between items-center pt-3 mt-3 border-t border-slate-100 dark:border-white/5">
-        <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
-          {task.status === 'todo' && (
-            <button 
-              onClick={() => onQuickMove(task.id, 'in_progress')} 
-              className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20 transition-colors"
-            >
-              В работу
-            </button>
-          )}
-          {task.status === 'in_progress' && (
-            isTeamMode ? (
-              <button 
-                onClick={() => onQuickMove(task.id, 'review')} 
-                className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
-              >
-                На проверку
-              </button>
-            ) : (
-              <button 
-                onClick={() => onQuickMove(task.id, 'done')} 
-                className={`text-[11px] font-bold px-3 py-1.5 rounded-xl ${btnPrimary}`}
-              >
-                Готово ✓
-              </button>
-            )
-          )}
-          {task.status === 'review' && isTeamMode && (
-            <button 
-              onClick={() => onQuickMove(task.id, 'done')} 
-              className={`text-[11px] font-bold px-3 py-1.5 rounded-xl ${btnPrimary}`}
-            >
-              Принять ✓
-            </button>
-          )}
-        </div>
-
-        <button 
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectTask(task);
-          }}
-          className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-0.5 font-bold transition-colors py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 active:scale-95"
-        >
-          Детали <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-});
-
-const TaskColumn = React.memo(({ title, colorClass, tasks, isTeamMode, isDark, onSelectTask, onQuickMove }) => {
-  return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2 mb-3 px-1">
-        <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`}></span>
-        <h3 className={`font-bold text-xs uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          {title} <span className="text-slate-400 font-normal ml-0.5">({tasks.length})</span>
-        </h3>
-      </div>
-      <div className="space-y-3 grow">
-        {tasks.length === 0 ? (
-          <div className={`text-center py-8 rounded-2xl border border-dashed text-xs font-medium ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
-            Задач пока нет
-          </div>
-        ) : (
-          tasks.map(task => (
-            <TaskCard 
-              key={task.id} 
-              task={task} 
-              isTeamMode={isTeamMode} 
-              isDark={isDark} 
-              onSelectTask={onSelectTask}
-              onQuickMove={onQuickMove}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-});
 
 // ==========================================
 // 3. ОСНОВНОЕ ПРИЛОЖЕНИЕ FLOW SPACE
@@ -233,9 +57,12 @@ export default function App() {
   const [isLogin, setIsLogin] = useState(true);
 
   const [docData, setDocData] = useState(null);
-  const [currentAssistantId] = useState('manager');
+  const [companyId, setCompanyId] = useState(null);
+  const [personalData, setPersonalData] = useState({ tasks: [], archive: [] });
 
   const [activeTab, setActiveTab] = useState('matrix');
+  const [currentWorkspace, setCurrentWorkspace] = useState(WORKSPACES.COMPANY);
+  const userRole = docData?.role || ROLES.OWNER;
   const [isDark, setIsDark] = useState(() => localStorage.getItem('flowspace_theme') === 'dark');
 
   const t = useCallback((key) => translations['ru'][key] || key, []);
@@ -266,6 +93,7 @@ export default function App() {
   // Состояние новой задачи
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskExpectedResult, setNewTaskExpectedResult] = useState('');
   const [newTaskHours, setNewTaskHours] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [newUrgent, setNewUrgent] = useState(false);
@@ -284,6 +112,7 @@ export default function App() {
 
   // Команда
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePosition, setInvitePosition] = useState('');
   const [inviteRole, setInviteRole] = useState('worker');
@@ -313,59 +142,92 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const docRef = doc(db, 'users', user.uid);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setDocData(data);
-        if (data.settings?.teamSize) setOnboardTeam(data.settings.teamSize);
-        if (data.settings?.telegramChatId) setTgChatId(data.settings.telegramChatId);
-      } else {
-        setDoc(docRef, {
-          email: user.email.toLowerCase(),
-          isPro: false,
-          appliedPromo: null,
-          settings: { isTeamMode: false, teamSize: '👤 Я один', telegramChatId: '', automations: defaultAutomations },
-          assistants: [{ id: 'manager', name: 'Владелец', position: 'Руководитель', role: 'manager' }],
-          workspaces: { 'manager': { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } }
-        }).catch(err => handleError(err, 'Инициализация профиля'));
-      }
-    }, (error) => handleError(error, 'Синхронизация данных'));
 
-    return () => unsubscribe();
+    let unsubscribeCompany = null;
+    let unsubscribePersonal = null;
+
+    const initUserAndCompany = async () => {
+      try {
+        const lowerEmail = user.email.toLowerCase();
+        let companyId = user.uid; // По умолчанию человек - владелец своей компании
+        let currentRole = ROLES.OWNER;
+
+        // 1. Проверяем, есть ли "Билет" (User Mapping) от другой компании
+        const mappingRef = doc(db, 'user_mappings', lowerEmail);
+        const mappingSnap = await getDoc(mappingRef);
+
+        if (mappingSnap.exists()) {
+          companyId = mappingSnap.data().companyId;
+          currentRole = mappingSnap.data().role;
+        } else {
+          // Если билета нет, создаем билет Владельца для себя
+          await setDoc(mappingRef, { companyId: user.uid, role: ROLES.OWNER });
+        }
+
+        setCompanyId(companyId);
+
+        // 2. Подписываемся на базу Компании (своей или начальника)
+        const docRef = doc(db, 'users', companyId);
+
+        unsubscribeCompany = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            // Внедряем роль текущего пользователя в данные, чтобы UI знал, кто это
+            setDocData({ ...data, role: currentRole });
+            if (data.settings?.teamSize) setOnboardTeam(data.settings.teamSize);
+            if (data.settings?.telegramChatId) setTgChatId(data.settings.telegramChatId);
+          } else {
+            // Инициализация новой базы (ТОЛЬКО если это Владелец)
+            if (currentRole === ROLES.OWNER) {
+              setDoc(docRef, {
+                email: lowerEmail,
+                isPro: false,
+                settings: { isTeamMode: false, teamSize: '👤 Я один', telegramChatId: '', automations: defaultAutomations },
+                assistants: [{
+                  id: user.uid,
+                  name: lowerEmail.split('@')[0] || 'Владелец',
+                  position: 'CEO',
+                  role: ROLES.OWNER
+                }],
+                tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0,
+                createdAt: new Date().toISOString()
+              }).catch(err => handleError(err, 'Инициализация профиля компании'));
+            }
+          }
+        }, (error) => handleError(error, 'Синхронизация данных'));
+
+        const personalRef = doc(db, 'personal_spaces', user.uid);
+        unsubscribePersonal = onSnapshot(personalRef, (personalSnap) => {
+          if (personalSnap.exists()) {
+            setPersonalData(personalSnap.data());
+          } else {
+            setDoc(personalRef, { tasks: [], archive: [], createdAt: new Date().toISOString() })
+              .catch(err => handleError(err, 'Инициализация личного пространства'));
+          }
+        }, (error) => handleError(error, 'Синхронизация личного пространства'));
+      } catch (err) {
+        handleError(err, 'Маршрутизация пользователя');
+      }
+    };
+
+    initUserAndCompany();
+    return () => {
+      if (unsubscribeCompany) unsubscribeCompany();
+      if (unsubscribePersonal) unsubscribePersonal();
+    };
   }, [user]);
 
-  const notifyTelegram = useCallback(async (message) => {
-    const chatId = docData?.settings?.telegramChatId;
-    if (!chatId) return; 
-    try {
-      await fetch('/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message })
-      });
-    } catch (error) {
-      console.error('Ошибка отправки в Telegram:', error);
-    }
-  }, [docData?.settings?.telegramChatId]);
+const notifyTelegram = useCallback(async (msg) => {
+    await sendTelegramAlert(msg, docData?.settings);
+  }, [docData?.settings]);
 
-  const processTaskAutomations = useCallback((event, taskData) => {
+const processTaskAutomations = useCallback((event, taskData) => {
     const rules = docData?.settings?.automations || defaultAutomations;
-
-    rules.forEach((rule) => {
-      if (!rule.enabled) return;
-
-      if (event === 'task_created' && rule.event === 'task_created') {
-        if (rule.condition === 'is_urgent' && taskData.urgent) {
-          notifyTelegram(`⚡ [АВТОМАТИЗАЦИЯ]: Создана срочная задача «${taskData.text}»!`);
-        }
-      }
-
-      if (event === 'status_changed' && rule.event === 'status_changed') {
-        if (taskData.status === rule.targetStatus) {
-          notifyTelegram(`⚡ [АВТОМАТИЗАЦИЯ]: Задача «${taskData.text}» требует проверки руководителем.`);
-        }
-      }
+    runTaskAutomations({
+      event,
+      taskData,
+      automations: rules,
+      notifyTelegram
     });
   }, [docData?.settings?.automations, notifyTelegram]);
 
@@ -403,20 +265,25 @@ export default function App() {
     }
   };
 
-  const currentWorkspace = useMemo(() => docData?.workspaces?.[currentAssistantId] || {}, [docData, currentAssistantId]);
-  const tasks = useMemo(() => currentWorkspace.tasks || [], [currentWorkspace]);
-  const archive = useMemo(() => currentWorkspace.archive || [], [currentWorkspace]);
-  const sops = useMemo(() => currentWorkspace.sops || [], [currentWorkspace]);
-  const kpis = useMemo(() => currentWorkspace.kpis || defaultKpis, [currentWorkspace]);
+  // Базовые коллекции теперь загружаются напрямую из документа компании
   const assistants = useMemo(() => docData?.assistants || [], [docData]);
-  
+  const sops = useMemo(() => docData?.sops || [], [docData]);
+  const activeData = currentWorkspace === WORKSPACES.PERSONAL ? personalData : docData;
+  const rawTasks = useMemo(() => activeData?.tasks || [], [activeData]);
+  const rawArchive = useMemo(() => activeData?.archive || [], [activeData]);
+
+  // ФИЛЬТРАЦИЯ ПРОСТРАНСТВ И РОЛЕЙ
+  // Если это Личное пространство -> показываем только задачи сотрудника.
+  // Если Компания -> руководитель видит всё, линейный сотрудник только свои.
+  const tasks = useMemo(() => filterTasksByRole(rawTasks, userRole, user?.uid, currentWorkspace), [rawTasks, userRole, user, currentWorkspace]);
+  const archive = useMemo(() => filterTasksByRole(rawArchive, userRole, user?.uid, currentWorkspace), [rawArchive, userRole, user, currentWorkspace]);
   const isPro = useMemo(() => docData?.isPro || !!docData?.appliedPromo, [docData]);
   const isTeamMode = useMemo(() => docData?.settings?.isTeamMode ?? (onboardTeam !== '👤 Я один'), [docData, onboardTeam]);
 
   // Фильтрация с мемоизацией
   const filteredTasks = useMemo(() => {
-    return assigneeFilter === 'all' 
-      ? tasks 
+    return assigneeFilter === 'all'
+      ? tasks
       : tasks.filter(tItem => tItem.assigneeName === assigneeFilter);
   }, [tasks, assigneeFilter]);
 
@@ -424,6 +291,10 @@ export default function App() {
   const inProgressTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'in_progress'), [filteredTasks]);
   const reviewTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'review'), [filteredTasks]);
   const deferredTasks = useMemo(() => filteredTasks.filter(tItem => tItem.status === 'deferred'), [filteredTasks]);
+// Динамический расчёт метрик и KPI на основе задач
+  const companyMetrics = useMemo(() => {
+    return calculateCompanyMetrics(tasks, archive);
+  }, [tasks, archive]);
 
   const handleApplyPromo = async () => {
     if (!promoInput.trim()) return toast.error('Введите промокод');
@@ -431,7 +302,7 @@ export default function App() {
     setIsApplyingPromo(true);
 
     try {
-      await setDoc(doc(db, 'users', user.uid), {
+      await setDoc(doc(db, 'users', companyId), {
         appliedPromo: code,
         isPro: true,
         settings: { ...docData?.settings, isTeamMode: true }
@@ -449,10 +320,12 @@ export default function App() {
   };
 
   const updateWorkspace = useCallback((newData) => {
-    setDoc(doc(db, 'users', user.uid), {
-      workspaces: { ...docData.workspaces, [currentAssistantId]: { ...currentWorkspace, ...newData } }
-    }, { merge: true }).catch(err => handleError(err, 'Сохранение рабочей области'));
-  }, [user, docData, currentAssistantId, currentWorkspace]);
+    const targetRef = currentWorkspace === WORKSPACES.PERSONAL
+      ? doc(db, 'personal_spaces', user.uid)
+      : doc(db, 'users', companyId);
+    return setDoc(targetRef, newData, { merge: true })
+      .catch(err => handleError(err, 'Сохранение рабочей области'));
+  }, [user, companyId, currentWorkspace]);
 
   const handleApplyTemplate = useCallback((template) => {
     try {
@@ -460,19 +333,20 @@ export default function App() {
         throw new Error('Шаблон пуст или поврежден');
       }
 
-      const newTasks = template.tasks.map((tItem, idx) => ({
-        id: Date.now() + idx,
-        text: tItem.text,
+      const isPersonal = currentWorkspace === WORKSPACES.PERSONAL;
+      const newTasks = template.tasks.map((tItem) => createNormalizedTask({
+        title: tItem.text,
         description: tItem.description || '',
+        expectedResult: tItem.expectedResult || '',
         estimatedHours: tItem.estimatedHours || 1,
-        dueDate: '',
         urgent: tItem.urgent || false,
         important: tItem.important || false,
-        status: 'todo',
-        assigneeName: isTeamMode ? 'Владелец' : null
+        assigneeId: isPersonal ? user?.uid : (assistants[0]?.id || user?.uid),
+        assigneeName: isPersonal ? (user?.displayName || user?.email || 'Я') : (assistants[0]?.name || 'Владелец'),
+        createdBy: user?.uid
       }));
 
-      updateWorkspace({ tasks: [...newTasks, ...tasks] });
+      updateWorkspace({ tasks: [...newTasks, ...(activeData?.tasks || [])] });
       toast.success(`Пакет "${template.name}" добавлен (${newTasks.length} задач)`);
       notifyTelegram(`📦 Добавлен пакет задач "${template.name}"`);
       setIsCreateOpen(false);
@@ -480,33 +354,42 @@ export default function App() {
       console.error('Ошибка применения шаблона:', error);
       toast.error(error.message || 'Не удалось применить шаблон');
     }
-  }, [isTeamMode, tasks, updateWorkspace, notifyTelegram]);
+  }, [currentWorkspace, user, assistants, activeData, updateWorkspace, notifyTelegram]);
 
-  const handleInviteColleague = async (e) => {
+const handleInviteColleague = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
+
     const newAssistantId = `emp_${Date.now()}`;
-    const newAssistantName = inviteEmail.split('@')[0];
-    
+    const lowerEmail = inviteEmail.toLowerCase();
+    const newAssistantName = lowerEmail.split('@')[0];
+    const assignedRole = inviteRole || ROLES.MEMBER;
+
     try {
-      await setDoc(doc(db, 'users', user.uid), {
-        assistants: [...assistants, { 
-          id: newAssistantId, 
-          name: newAssistantName, 
-          email: inviteEmail, 
-          role: inviteRole,
-          position: invitePosition || 'Сотрудник'
-        }],
-        workspaces: { 
-          ...docData.workspaces, 
-          [newAssistantId]: { tasks: [], archive: [], sops: [], kpis: defaultKpis, savedTime: 0 } 
-        }
+      const newAssistant = {
+        id: newAssistantId,
+        name: newAssistantName,
+        email: lowerEmail,
+        role: assignedRole,
+        position: invitePosition || 'Сотрудник',
+        invitedAt: new Date().toISOString()
+      };
+
+      // 1. Добавляем сотрудника в команду
+      await setDoc(doc(db, 'users', companyId), {
+        assistants: [...assistants, newAssistant]
       }, { merge: true });
-      
-      setIsInviteOpen(false); 
-      setInviteEmail(''); 
+
+      // 2. Создаем "Билет" (User Mapping), чтобы сотрудник при входе попал в эту компанию
+      await setDoc(doc(db, 'user_mappings', lowerEmail), {
+        companyId,
+        role: assignedRole
+      });
+
+      setIsInviteOpen(false);
+      setInviteEmail('');
       setInvitePosition('');
-      toast.success(`Сотрудник ${inviteEmail} добавлен в команду!`);
+      toast.success(`Сотрудник ${lowerEmail} добавлен в команду!`);
     } catch (err) {
       handleError(err, 'Приглашение сотрудника');
     }
@@ -530,7 +413,7 @@ export default function App() {
     recognitionRef.current = recognition;
 
     recognition.onstart = () => setIsListening(true);
-    
+
     recognition.onresult = async (event) => {
       const transcript = event.results[0][0].transcript;
       toast.info('🎙 Распознавание ИИ...', { duration: 3000 });
@@ -549,20 +432,26 @@ export default function App() {
 
         const aiTasks = safeParseAIJSON(response.choices[0].message.content);
 
-        const newTasks = aiTasks.map((tItem, idx) => ({
-          id: Date.now() + idx,
-          text: tItem.text || 'Новая задача',
-          description: tItem.description || '',
-          estimatedHours: 1,
-          urgent: !!tItem.urgent,
-          important: !!tItem.important,
-          status: 'todo',
-          assigneeName: isTeamMode && tItem.assignee ? (assistants.find(a => a.name.toLowerCase().includes(tItem.assignee.toLowerCase()))?.name || null) : null
-        }));
+        const isPersonal = currentWorkspace === WORKSPACES.PERSONAL;
+        const newTasks = aiTasks.map((tItem) => {
+          const matchedAssistant = tItem.assignee
+            ? assistants.find(a => a.name.toLowerCase().includes(tItem.assignee.toLowerCase()))
+            : null;
+          return createNormalizedTask({
+            title: tItem.text || 'Новая задача',
+            description: tItem.description || '',
+            estimatedHours: 1,
+            urgent: !!tItem.urgent,
+            important: !!tItem.important,
+            assigneeId: isPersonal ? user?.uid : (matchedAssistant?.id || assistants[0]?.id || user?.uid),
+            assigneeName: isPersonal ? (user?.displayName || user?.email || 'Я') : (matchedAssistant?.name || assistants[0]?.name || 'Владелец'),
+            createdBy: user?.uid
+          });
+        });
 
-        updateWorkspace({ tasks: [...newTasks, ...tasks] });
+        updateWorkspace({ tasks: [...newTasks, ...(activeData?.tasks || [])] });
         toast.success(`Создано задач: ${newTasks.length}`);
-        
+
         notifyTelegram(`🎙 Голосовой ввод распознан.\nСоздано задач: ${newTasks.length}`);
         setIsCreateOpen(false);
 
@@ -573,17 +462,36 @@ export default function App() {
 
     recognition.onerror = () => setIsListening(false);
     recognition.start();
-  }, [isListening, isTeamMode, assistants, tasks, updateWorkspace, notifyTelegram]);
+  }, [isListening, currentWorkspace, user, assistants, activeData, updateWorkspace, notifyTelegram]);
 
   const handleRunAIAgent = async () => {
-    const targetTask = tasks.find(tItem => tItem.status === 'todo' && (!tItem.description || parseFloat(tItem.estimatedHours) === 0));
-    if (!targetTask) return toast.info("Все задачи в бэклоге уже оформлены!");
+    const targetTask = tasks.find(tItem => tItem.status === 'todo' && (!tItem.expectedResult || !tItem.description || parseFloat(tItem.estimatedHours) === 0));
+    if (!targetTask) return toast.info("Все задачи в бэклоге уже содержат критерии готовности и ТЗ!");
 
     setIsAgentRunning(true);
     try {
-      const prompt = isTeamMode 
-        ? `Проанализируй задачу "${targetTask.text}". Назначь исполнителя из списка: ${assistants.map(a => a.name).join(', ')}. Выдай JSON: {"description": "План", "estimatedHours": 1.5, "urgent": false, "important": true, "assignee": "Имя"}`
-        : `Проанализируй задачу "${targetTask.text}" для соло-разработчика. Выдай JSON: {"description": "Пошаговый план", "estimatedHours": 2, "urgent": false, "important": true}`;
+      const prompt = isTeamMode
+        ? `Ты — бизнес-архитектор Flow Space. Принцип: «Контролируй результат, а не каждый шаг».
+Проанализируй цель: "${targetTask.text}". Назначь наиболее подходящего исполнителя из списка: ${assistants.map(a => a.name).join(', ')}.
+Верни строго валидный JSON:
+{
+  "expectedResult": "Четкий образ готового результата (по каким критериям руководитель примет работу)",
+  "description": "Контекст задачи и вводные ориентиры",
+  "estimatedHours": 1.5,
+  "urgent": false,
+  "important": true,
+  "assignee": "Имя сотрудника"
+}`
+        : `Ты — бизнес-архитектор Flow Space. Принцип: «Контролируй результат, а не каждый шаг».
+Проанализируй цель: "${targetTask.text}".
+Верни строго валидный JSON:
+{
+  "expectedResult": "Четкий образ готового результата",
+  "description": "Контекст задачи и вводные ориентиры",
+  "estimatedHours": 2,
+  "urgent": false,
+  "important": true
+}`;
 
       const response = await callServerAI({
         model: 'gpt-4o-mini',
@@ -594,20 +502,21 @@ export default function App() {
       let rawContent = response.choices[0].message.content.trim();
       if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
       if (rawContent.startsWith('```')) rawContent = rawContent.replace(/```/g, '').trim();
-      
+
       const aiResult = JSON.parse(rawContent);
 
       updateWorkspace({
-        tasks: tasks.map(tItem => tItem.id === targetTask.id ? {
+        tasks: (activeData?.tasks || []).map(tItem => tItem.id === targetTask.id ? {
           ...tItem,
-          description: aiResult.description || tItem.description,
-          estimatedHours: aiResult.estimatedHours || 1,
-          urgent: !!aiResult.urgent,
-          important: !!aiResult.important,
-          assigneeName: isTeamMode ? aiResult.assignee : null
+          expectedResult: aiResult.expectedResult || tItem.expectedResult || '',
+          description: aiResult.description || tItem.description || '',
+          estimatedHours: parseFloat(aiResult.estimatedHours) || tItem.estimatedHours || 1,
+          urgent: aiResult.urgent !== undefined ? Boolean(aiResult.urgent) : tItem.urgent,
+          important: aiResult.important !== undefined ? Boolean(aiResult.important) : tItem.important,
+          assigneeName: isTeamMode && aiResult.assignee ? aiResult.assignee : tItem.assigneeName
         } : tItem)
       });
-      toast.success('Агент оформил задачу!');
+      toast.success('Умный Агент сформировал критерии готовности задачи!');
     } catch (error) {
       handleError(error, 'Запуск Умного Агента');
     } finally {
@@ -615,17 +524,36 @@ export default function App() {
     }
   };
 
-  const handleGenerateTeamReport = async () => {
+ const handleGenerateTeamReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const prompt = `Проанализируй состояние команды: Всего задач: ${tasks.length}, В работе: ${inProgressTasks.length}, На проверке: ${reviewTasks.length}. Напиши строгую бизнес-сводку для владельца из 3 пунктов: 1. Статус производства, 2. Риски, 3. Решение.`;
+      const promptData = {
+        totalTasks: tasks.length,
+        inProgress: inProgressTasks.length,
+        inReview: reviewTasks.length,
+        slaScore: companyMetrics.slaScore,
+        overdueRate: companyMetrics.overdueRate,
+        totalHours: companyMetrics.totalHoursEstimated,
+        tasksWithExpectedResult: tasks.filter(t => !!t.expectedResult).length
+      };
+
+      const systemPrompt = `Ты — Executive AI-консультант Flow Space. Твой фундаментальный принцип: «Контролируй результат, а не каждый шаг».
+Сформируй для руководителя лаконичную управленческую сводку (до 180 слов) строго по 3 блокам:
+1. 🎯 ДОСТИЖЕНИЕ РЕЗУЛЬТАТОВ: статус выполнения обязательств и текущий показатель соблюдения SLA (${promptData.slaScore}%).
+2. ⚠️ РИСКИ И СРЫВЫ СРОКОВ: уровень просрочек (${promptData.overdueRate}%), задачи на проверке (${promptData.inReview}) и потенциальные заторы.
+3. ⚡ УПРАВЛЕНЧЕСКОЕ РЕШЕНИЕ: 1-2 конкретных действия для руководителя, чтобы обеспечить результат без микроменеджмента.`;
+
       const data = await callServerAI({
         model: 'gpt-4o-mini',
-        messages: [{ role: 'system', content: prompt }],
-        temperature: 0.4
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Текущие метрики компании: ${JSON.stringify(promptData)}` }
+        ],
+        temperature: 0.3
       });
+
       setTeamReport(data.choices[0].message.content.trim());
-      toast.success('Отчет сформирован');
+      toast.success('Управленческий отчет сформирован');
     } catch (err) {
       handleError(err, 'Генерация отчета');
     } finally {
@@ -633,29 +561,51 @@ export default function App() {
     }
   };
 
-  const handleCopyReport = () => {
-    navigator.clipboard.writeText(`📊 ОТЧЕТ ПО ПРОЕКТУ\n\n${teamReport}\n\nСформировано в Flow Space Enterprise.`);
-    toast.success('Отчет скопирован!');
+ const handleCopyReport = () => {
+    if (!teamReport) return;
+    copyToClipboard(teamReport, 'Отчет скопирован в буфер');
   };
 
-  const handleTaskAI = async (mode) => {
-    if (!newTaskTitle.trim()) return toast.error('Введите название задачи!');
+const handleTaskAI = async (mode) => {
+    if (!newTaskTitle.trim()) return toast.error('Введите цель задачи!');
     setIsTaskGenerating(true);
     try {
-      const prompt = mode === 'expand' 
-        ? 'Преврати эту идею в структурированное ТЗ для задачи.' 
-        : 'Разбей эту задачу на пошаговый чек-лист.';
+      const systemPrompt = mode === 'expand'
+        ? `Ты — бизнес-архитектор Flow Space. Принцип: «Контролируй результат, а не каждый шаг».
+По полученной цели сформулируй ответ строго в формате JSON:
+{
+  "expectedResult": "Четкий, проверяемый образ готового результата (1-2 предложения, по каким критериям руководитель примет работу)",
+  "description": "Контекст задачи, ключевые вводные и ориентиры для исполнителя"
+}`
+        : `Ты — бизнес-архитектор Flow Space.
+По полученной цели составь критерии приемки и ориентировочный чек-лист в формате JSON:
+{
+  "expectedResult": "Критерии готовности (Definition of Done)",
+  "description": "Чек-лист готовности:\\n- [ ] Критерий 1\\n- [ ] Критерий 2\\n- [ ] Критерий 3"
+}`;
 
-      const data = await callServerAI({
+      const response = await callServerAI({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: prompt },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: newTaskTitle }
         ],
-        temperature: 0.3
+        temperature: 0.2
       });
-      setNewTaskDesc(data.choices[0].message.content.trim());
-      toast.success('Текст сформирован');
+
+      let rawContent = response.choices[0].message.content.trim();
+      if (rawContent.startsWith('```json')) rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+      if (rawContent.startsWith('```')) rawContent = rawContent.replace(/```/g, '').trim();
+
+      try {
+        const parsed = JSON.parse(rawContent);
+        if (parsed.expectedResult) setNewTaskExpectedResult(parsed.expectedResult);
+        if (parsed.description) setNewTaskDesc(parsed.description);
+      } catch {
+        setNewTaskDesc(rawContent);
+      }
+
+      toast.success('ИИ сформировал образ результата и контекст');
     } catch (err) {
       handleError(err, 'ИИ Генератор');
     } finally {
@@ -732,7 +682,7 @@ export default function App() {
         temperature: 0.3
       });
       const title = response.choices[0].message.content.trim().replace(/["']/g, '');
-      
+
       const newSOP = {
         id: Date.now(),
         title: title,
@@ -764,27 +714,52 @@ export default function App() {
     toast.success('Заполнено для создания задачи');
   };
 
-  const handleSaveTask = (e) => {
+ const handleSaveTask = (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
 
-    const taskObj = {
-      id: selectedTask ? selectedTask.id : Date.now(),
-      text: newTaskTitle,
-      description: newTaskDesc,
-      estimatedHours: parseFloat(newTaskHours) || 0,
-      dueDate: newTaskDueDate,
-      urgent: newUrgent,
-      important: newImportant,
-      status: selectedTask ? selectedTask.status : 'todo',
-      assigneeName: isTeamMode ? (assistants.find(a => a.id === newTaskAssignee)?.name || 'Владелец') : null
-    };
+    const selectedAssignee = assistants.find(a => a.id === newTaskAssignee);
+    const isPersonal = currentWorkspace === WORKSPACES.PERSONAL;
+    const assigneeName = isPersonal
+      ? (user?.displayName || user?.email || 'Я')
+      : (selectedAssignee?.name || 'Владелец');
+    const assigneeId = isPersonal ? user?.uid : (selectedAssignee?.id || user?.uid);
+
+    // SaaS безопасность: берем полный массив задач из базы, а не отфильтрованный
+    const rawTasks = activeData?.tasks || [];
+    let taskObj;
 
     if (selectedTask) {
-      updateWorkspace({ tasks: tasks.map(tItem => tItem.id === selectedTask.id ? taskObj : tItem) });
+      taskObj = normalizeTask({
+        ...selectedTask,
+        text: newTaskTitle,
+        description: newTaskDesc,
+        expectedResult: newTaskExpectedResult,
+        estimatedHours: parseFloat(newTaskHours) || 0,
+        dueDate: newTaskDueDate,
+        urgent: newUrgent,
+        important: newImportant,
+        assigneeId,
+        assigneeName
+      }, user?.uid);
+
+      updateWorkspace({ tasks: rawTasks.map(tItem => tItem.id === selectedTask.id ? taskObj : tItem) });
       toast.success('Задача обновлена');
     } else {
-      updateWorkspace({ tasks: [taskObj, ...tasks] });
+      taskObj = createNormalizedTask({
+        title: newTaskTitle,
+        description: newTaskDesc,
+        expectedResult: newTaskExpectedResult,
+        estimatedHours: parseFloat(newTaskHours) || 1,
+        dueDate: newTaskDueDate,
+        urgent: newUrgent,
+        important: newImportant,
+        assigneeId,
+        assigneeName,
+        createdBy: user?.uid || 'owner'
+      });
+
+      updateWorkspace({ tasks: [taskObj, ...rawTasks] });
       toast.success('Новая задача создана');
       notifyTelegram(`📝 Новая задача: ${newTaskTitle}\nПриоритет: ${newUrgent ? 'Срочно' : 'Обычный'}`);
       processTaskAutomations('task_created', taskObj);
@@ -794,41 +769,58 @@ export default function App() {
   };
 
   const handleQuickMove = useCallback((taskId, newStatus) => {
-    const task = tasks.find(tItem => tItem.id === taskId) || archive.find(tItem => tItem.id === taskId);
+    // SaaS безопасность: берем полные массивы из базы
+    const rawTasks = activeData?.tasks || [];
+    const rawArchive = activeData?.archive || [];
+
+    const task = rawTasks.find(tItem => tItem.id === taskId) || rawArchive.find(tItem => tItem.id === taskId);
     if (!task) return;
 
+    // Восстановление из архива в работу
     if (newStatus === 'todo' && task.status === 'done') {
+      const restoredTask = {
+        ...task,
+        status: 'todo',
+        completedAt: null
+      };
       updateWorkspace({
-        tasks: [{ ...task, status: 'todo' }, ...tasks],
-        archive: archive.filter(tItem => tItem.id !== taskId)
+        tasks: [restoredTask, ...rawTasks],
+        archive: rawArchive.filter(tItem => tItem.id !== taskId)
       });
-      toast.success('Задача восстановлена');
+      toast.success('Задача возвращена в работу');
       return;
     }
 
-    processTaskAutomations('status_changed', { ...task, status: newStatus });
+    const updatedTask = {
+      ...task,
+      status: newStatus,
+      completedAt: newStatus === 'done' ? new Date().toISOString() : null
+    };
+
+    processTaskAutomations('status_changed', updatedTask);
 
     if (newStatus === 'review') {
-      notifyTelegram(`👀 Задача на проверке:\n«${task.text}»\nИсполнитель: ${task.assigneeName || 'Владелец'}`);
+      notifyTelegram(`👀 Результат передан на проверку:\n«${task.text}»\nКритерии: ${task.expectedResult || 'Не указаны'}\nИсполнитель: ${task.assigneeName || 'Владелец'}`);
     } else if (newStatus === 'done') {
-      notifyTelegram(`✅ Задача выполнена:\n«${task.text}»`);
+      notifyTelegram(`🎯 Результат принят руководителем:\n«${task.text}»`);
     }
 
     if (newStatus === 'done') {
       updateWorkspace({
-        tasks: tasks.filter(tItem => tItem.id !== taskId),
-        archive: [{ ...task, status: 'done' }, ...archive]
+        tasks: rawTasks.filter(tItem => tItem.id !== taskId),
+        archive: [updatedTask, ...rawArchive]
       });
-      toast.success('Перенесено в Архив');
+      toast.success('Результат принят и перенесен в Архив');
     } else {
       updateWorkspace({
-        tasks: tasks.map(tItem => tItem.id === taskId ? { ...tItem, status: newStatus } : tItem)
+        tasks: rawTasks.map(tItem => tItem.id === taskId ? updatedTask : tItem)
       });
     }
-  }, [tasks, archive, updateWorkspace, notifyTelegram, processTaskAutomations]);
+  }, [activeData, updateWorkspace, notifyTelegram, processTaskAutomations]);
 
   const handleDeleteTask = (taskId) => {
-    updateWorkspace({ tasks: tasks.filter(tItem => tItem.id !== taskId) });
+    const rawTasks = activeData?.tasks || [];
+    updateWorkspace({ tasks: rawTasks.filter(tItem => tItem.id !== taskId) });
     toast.success('Задача удалена');
     closeModal();
   };
@@ -838,6 +830,7 @@ export default function App() {
       setSelectedTask(task);
       setNewTaskTitle(task.text);
       setNewTaskDesc(task.description || '');
+      setNewTaskExpectedResult(task.expectedResult || '');
       setNewTaskHours(task.estimatedHours || '');
       setNewTaskDueDate(task.dueDate || '');
       setNewUrgent(task.urgent || false);
@@ -846,6 +839,7 @@ export default function App() {
       setSelectedTask(null);
       setNewTaskTitle('');
       setNewTaskDesc('');
+      setNewTaskExpectedResult('');
       setNewTaskHours('');
       setNewTaskDueDate('');
       setNewUrgent(false);
@@ -862,11 +856,11 @@ export default function App() {
   const handleSaveSettings = async () => {
     const isTeam = onboardTeam !== '👤 Я один';
     try {
-      await setDoc(doc(db, 'users', user.uid), {
-        settings: { 
-          ...docData?.settings, 
-          isTeamMode: isTeam, 
-          teamSize: onboardTeam, 
+      await setDoc(doc(db, 'users', companyId), {
+        settings: {
+          ...docData?.settings,
+          isTeamMode: isTeam,
+          teamSize: onboardTeam,
           telegramChatId: tgChatId,
           automations: docData?.settings?.automations || defaultAutomations
         }
@@ -883,139 +877,62 @@ export default function App() {
   const textMain = isDark ? 'text-white' : 'text-slate-900';
   const inputBg = isDark ? 'bg-[#0E1116] border-white/10 text-white placeholder:text-slate-600' : 'bg-slate-50 border-slate-200/80 text-slate-900 placeholder:text-slate-400';
 
-  if (!user || !docData) return (
-    <div className={`min-h-screen flex items-center justify-center p-4 font-sans ${themeBg}`}>
-      <Toaster position="top-center" richColors />
-      <div className={`p-8 rounded-3xl max-w-md w-full border ${cardBg}`}>
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-black text-lg shadow-md">FS</div>
-          <h1 className={`text-2xl font-black tracking-tight ${textMain}`}>Flow Space</h1>
-        </div>
-        <form onSubmit={handleAuth} className="space-y-3">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border text-sm ${inputBg}`} />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" required className={`w-full px-4 py-3.5 rounded-2xl outline-none border text-sm ${inputBg}`} />
-          <button type="submit" className={`w-full py-3.5 rounded-2xl font-bold text-sm ${btnPrimary}`}>
-            {isLogin ? 'Войти в систему' : 'Зарегистрироваться'}
-          </button>
-        </form>
+  // 1. Экран входа / регистрации (если пользователь не авторизован)
+  if (!user || !docData) {
+    return (
+      <AuthView
+        themeBg={themeBg}
+        cardBg={cardBg}
+        textMain={textMain}
+        inputBg={inputBg}
+        btnPrimary={btnPrimary}
+        isDark={isDark}
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        isLogin={isLogin}
+        setIsLogin={setIsLogin}
+        handleAuth={handleAuth}
+        signInWithGoogle={signInWithGoogle}
+        handleResetPassword={handleResetPassword}
+      />
+    );
+  }
 
-        <button 
-          type="button" 
-          onClick={signInWithGoogle} 
-          className={`w-full font-bold py-3.5 mt-3 rounded-2xl border transition-transform active:scale-95 text-xs flex items-center justify-center gap-2 ${isDark ? 'bg-transparent border-white/10 text-white hover:bg-white/5' : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'}`}
-        >
-          <Globe className="w-4 h-4 text-slate-900 dark:text-white" /> Войти через Google
-        </button>
-
-        <div className="mt-6 flex flex-col items-center gap-2">
-          <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
-            {isLogin ? 'Нет аккаунта? Создать' : 'Уже есть аккаунт? Войти'}
-          </button>
-          {isLogin && (
-            <button type="button" onClick={handleResetPassword} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
-              Забыли пароль?
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
+  // 2. Главный экран приложения (когда пользователь вошёл)
   return (
     <div className={`min-h-screen font-sans pb-36 md:pb-12 md:pl-64 ${themeBg}`}>
       <Toaster position="top-center" richColors />
-      
+
       {/* ДЕСКТОПНОЕ МЕНЮ */}
-      <nav className={`hidden md:flex fixed top-0 left-0 w-64 h-screen border-r flex-col justify-start py-6 px-4 gap-1.5 ${isDark ? 'bg-[#0E1116] border-white/10' : 'bg-[#F8FAFC] border-slate-200/80'}`}>
-        <div className="flex items-center justify-between mb-6 px-2">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-black text-sm shadow-md">FS</div>
-            <h1 className={`text-lg font-black tracking-tight ${textMain}`}>Flow Space</h1>
-          </div>
-          {isPro && (
-            <span className="px-2 py-0.5 rounded bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-[9px] font-black uppercase">
-              PRO
-            </span>
-          )}
-        </div>
-
-        <button onClick={() => openTaskModal()} className={`flex items-center justify-center gap-2 w-full h-11 rounded-xl font-bold text-sm mb-4 ${btnPrimary}`}>
-          <Plus className="w-4 h-4" /> Создать задачу
-        </button>
-
-        <button onClick={() => setActiveTab('matrix')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'matrix' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-          <LayoutDashboard className="w-4 h-4" /> Задачи
-        </button>
-        <button onClick={() => setActiveTab('processes')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'processes' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-          <Bot className="w-4 h-4" /> Ассистент
-        </button>
-        <button onClick={() => setActiveTab('sops')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'sops' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-          <BookOpen className="w-4 h-4" /> Регламенты
-        </button>
-        
-        {isTeamMode && (
-          <>
-            <button onClick={() => setActiveTab('team')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'team' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-              <Users className="w-4 h-4" /> Команда
-            </button>
-            <button onClick={() => setActiveTab('kpi')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'kpi' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-              <BarChart3 className="w-4 h-4" /> Сводка SLA
-            </button>
-          </>
-        )}
-
-        <button onClick={() => setActiveTab('archive')} className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors ${activeTab === 'archive' ? 'bg-slate-200/80 text-slate-900 dark:bg-white/10 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-          <FolderArchive className="w-4 h-4" /> Архив
-        </button>
-
-        <div className="mt-auto border-t border-slate-200 dark:border-white/10 pt-4 space-y-1">
-          <button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2 text-xs font-bold text-slate-500 px-2 py-2 w-full dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
-            <Settings className="w-3.5 h-3.5" /> Настройки
-          </button>
-          <button onClick={() => signOut(auth)} className="flex items-center gap-2 w-full text-left px-2 py-2 text-xs font-bold text-red-500 hover:underline">
-            <LogOut className="w-3.5 h-3.5" /> Выйти
-          </button>
-        </div>
-      </nav>
+      <Sidebar
+        isDark={isDark}
+        isPro={isPro}
+        isTeamMode={isTeamMode}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        openTaskModal={openTaskModal}
+        setShowOnboarding={setShowOnboarding}
+        onSignOut={() => signOut(auth)}
+        btnPrimary={btnPrimary}
+        currentWorkspace={currentWorkspace}
+        setCurrentWorkspace={setCurrentWorkspace}
+        userRole={userRole}
+      />
 
       {/* ПРЕМИАЛЬНАЯ МОБИЛЬНАЯ НАВИГАЦИЯ (ОСТРОВ) */}
-      <div className="md:hidden fixed bottom-5 left-4 right-4 z-40">
-        <div className={`flex justify-between items-center px-4 py-2 rounded-2xl shadow-2xl border backdrop-blur-lg ${isDark ? 'bg-[#1C2128]/90 border-white/10 shadow-black/60' : 'bg-white/90 border-slate-200/80 shadow-slate-300/50'}`}>
-          <button onClick={() => setActiveTab('matrix')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'matrix' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
-            <LayoutDashboard className="w-5 h-5" />
-            <span className="text-[9px]">Задачи</span>
-          </button>
-          <button onClick={() => setActiveTab('processes')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'processes' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
-            <Bot className="w-5 h-5" />
-            <span className="text-[9px]">ИИ</span>
-          </button>
-          
-          <button onClick={() => openTaskModal()} className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-xl active:scale-95 transition-transform shadow-md ${isDark ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}`}>
-            <Plus className="w-5 h-5" />
-          </button>
-
-          <button onClick={() => setActiveTab('sops')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'sops' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
-            <BookOpen className="w-5 h-5" />
-            <span className="text-[9px]">База</span>
-          </button>
-
-          {isTeamMode ? (
-            <button onClick={() => setActiveTab('team')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'team' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
-              <Users className="w-5 h-5" />
-              <span className="text-[9px]">Люди</span>
-            </button>
-          ) : (
-            <button onClick={() => setActiveTab('archive')} className={`flex flex-col items-center gap-1 w-12 ${activeTab === 'archive' ? 'text-slate-900 dark:text-white font-extrabold' : 'text-slate-400'}`}>
-              <FolderArchive className="w-5 h-5" />
-              <span className="text-[9px]">Архив</span>
-            </button>
-          )}
-        </div>
-      </div>
+      <MobileNav
+        isDark={isDark}
+        isTeamMode={isTeamMode}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        openTaskModal={openTaskModal}
+      />
 
       {/* ОСНОВНОЙ КОНТЕНТ */}
       <div className="max-w-6xl mx-auto p-4 md:p-8">
-        
+
         <header className="flex justify-between items-center mb-4 pt-1">
           <div>
             <h2 className={`text-xl font-black tracking-tight ${textMain}`}>
@@ -1036,20 +953,20 @@ export default function App() {
         {/* ПЕРЕКЛЮЧАТЕЛЬ ДЛЯ КОМАНДНОГО РЕЖИМА НА МОБИЛЬНЫХ */}
         {isTeamMode && (
           <div className="md:hidden grid grid-cols-3 gap-1 p-1 bg-slate-200/60 dark:bg-white/5 rounded-xl mb-4 text-[11px] font-bold">
-            <button 
-              onClick={() => setActiveTab('matrix')} 
+            <button
+              onClick={() => setActiveTab('matrix')}
               className={`py-2 rounded-lg transition-all ${activeTab === 'matrix' ? 'bg-white dark:bg-[#161B22] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}
             >
               Задачи
             </button>
-            <button 
-              onClick={() => setActiveTab('team')} 
+            <button
+              onClick={() => setActiveTab('team')}
               className={`py-2 rounded-lg transition-all ${activeTab === 'team' ? 'bg-white dark:bg-[#161B22] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}
             >
               Команда
             </button>
-            <button 
-              onClick={() => setActiveTab('kpi')} 
+            <button
+              onClick={() => setActiveTab('kpi')}
               className={`py-2 rounded-lg transition-all ${activeTab === 'kpi' ? 'bg-white dark:bg-[#161B22] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}
             >
               Сводка
@@ -1059,504 +976,187 @@ export default function App() {
 
         {/* ВКЛАДКА: ЗАДАЧИ */}
         {activeTab === 'matrix' && (
-          <div className="space-y-4">
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isDark ? 'bg-[#161B22] border-white/10' : 'bg-slate-50 border-slate-200/80'}`}>
-              <div>
-                <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Умный Агент
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Автоматически находит неполные задачи и составляет ТЗ.</p>
-              </div>
-              <button onClick={handleRunAIAgent} disabled={isAgentRunning} className={`px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50 ${btnPrimary}`}>
-                {isAgentRunning ? 'Запуск...' : 'Запустить Агента'}
-              </button>
-            </div>
-
-            {/* ГОРИЗОНТАЛЬНЫЙ СКРОЛЛ ФИЛЬТРОВ ПО СОТРУДНИКАМ */}
-            {isTeamMode && assistants.length > 1 && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 shrink-0 mr-1">
-                  <Filter className="w-3 h-3" /> Фильтр:
-                </span>
-                <button 
-                  onClick={() => setAssigneeFilter('all')} 
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 transition-all ${assigneeFilter === 'all' ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 bg-white dark:bg-[#161B22]'}`}
-                >
-                  Все ({tasks.length})
-                </button>
-                {assistants.map(ast => {
-                  const count = tasks.filter(tItem => tItem.assigneeName === ast.name).length;
-                  return (
-                    <button 
-                      key={ast.id} 
-                      onClick={() => setAssigneeFilter(ast.name)} 
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 transition-all flex items-center gap-1.5 ${assigneeFilter === ast.name ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 bg-white dark:bg-[#161B22]'}`}
-                    >
-                      <User className="w-3 h-3 opacity-60" /> {ast.name} <span className="opacity-60 text-[10px]">({count})</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className={`grid grid-cols-1 ${isTeamMode ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
-              <TaskColumn title={t('colTodo')} colorClass="bg-slate-400" tasks={todoTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
-              <TaskColumn title={t('colInProgress')} colorClass="bg-blue-500" tasks={inProgressTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
-              
-              {isTeamMode && (
-                <TaskColumn title={t('colReview')} colorClass="bg-amber-500" tasks={reviewTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
-              )}
-              
-              <TaskColumn title={t('colDeferred')} colorClass="bg-slate-600" tasks={deferredTasks} isTeamMode={isTeamMode} isDark={isDark} onSelectTask={openTaskModal} onQuickMove={handleQuickMove} />
-            </div>
-          </div>
+          <MatrixView
+            isDark={isDark}
+            isTeamMode={isTeamMode}
+            handleRunAIAgent={handleRunAIAgent}
+            isAgentRunning={isAgentRunning}
+            btnPrimary={btnPrimary}
+            assistants={assistants}
+            tasks={tasks}
+            assigneeFilter={assigneeFilter}
+            setAssigneeFilter={setAssigneeFilter}
+            t={t}
+            todoTasks={todoTasks}
+            inProgressTasks={inProgressTasks}
+            reviewTasks={reviewTasks}
+            deferredTasks={deferredTasks}
+            openTaskModal={openTaskModal}
+            handleQuickMove={handleQuickMove}
+          />
         )}
 
         {/* ВКЛАДКА: АССИСТЕНТ (ЧАТ) */}
         {activeTab === 'processes' && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            <div className={`p-6 rounded-3xl border ${cardBg}`}>
-              <h3 className={`text-base font-bold mb-4 ${textMain}`}>Выбор специалиста</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-                {aiOptions.map(opt => (
-                  <button 
-                    key={opt.id} 
-                    onClick={() => setProcessRole(opt.id)}
-                    className={`p-3 rounded-2xl border text-left text-xs font-bold transition-all ${processRole === opt.id ? 'border-slate-900 bg-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/5 text-slate-700 dark:text-slate-300'}`}
-                  >
-                    <div className="text-lg mb-1">{opt.icon}</div>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-
-              <textarea 
-                value={processTopic} 
-                onChange={(e) => setProcessTopic(e.target.value)} 
-                placeholder="Опишите задачу подробнее..." 
-                rows="3" 
-                className={`w-full p-4 rounded-2xl outline-none border text-sm resize-none mb-3 ${inputBg}`} 
-              />
-              <button 
-                onClick={handleGenerateProcess} 
-                disabled={isProcessGenerating || !processTopic.trim()} 
-                className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl text-xs font-bold disabled:opacity-50 ${btnPrimary}`}
-              >
-                <Send className="w-3.5 h-3.5" />
-                {isProcessGenerating ? 'Обработка запроса...' : 'Отправить запрос'}
-              </button>
-            </div>
-
-            {processMessages.length > 0 && (
-              <div className="space-y-4">
-                {processMessages.map((msg, idx) => (
-                  <div key={idx} className={`p-5 rounded-2xl border text-sm ${msg.role === 'user' ? 'bg-slate-100 border-slate-200 text-slate-800 dark:bg-white/10 dark:border-white/20 dark:text-white ml-6' : `${cardBg} mr-6`}`}>
-                    <div className="font-bold text-xs mb-2 opacity-60 flex items-center gap-1.5">
-                      {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
-                      {msg.role === 'user' ? 'Ваш запрос' : 'Ответ Ассистента'}
-                    </div>
-                    <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
-
-                    {msg.role === 'assistant' && (
-                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-white/10">
-                        <button 
-                          onClick={() => handleCreateTaskFromAI(msg.content)} 
-                          className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> В задачу
-                        </button>
-                        <button 
-                          onClick={() => handleSaveToSOP(msg.content)} 
-                          className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white transition-colors flex items-center gap-1.5"
-                        >
-                          <BookOpen className="w-3.5 h-3.5" /> Сохранить регламент
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                <div className={`p-2 pl-4 flex items-center gap-2 rounded-2xl border ${cardBg}`}>
-                  <input 
-                    type="text" 
-                    value={followUpText} 
-                    onChange={(e) => setFollowUpText(e.target.value)} 
-                    onKeyPress={(e) => e.key === 'Enter' && handleFollowUpProcess()}
-                    placeholder="Уточнить запрос..." 
-                    className="flex-1 bg-transparent outline-none text-xs font-medium" 
-                  />
-                  <button onClick={handleFollowUpProcess} disabled={isProcessGenerating} className={`px-4 py-2.5 rounded-xl text-xs flex items-center gap-1 ${btnPrimary}`}>
-                    <Send className="w-3 h-3" /> Отправить
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <AssistantView
+            cardBg={cardBg}
+            textMain={textMain}
+            inputBg={inputBg}
+            btnPrimary={btnPrimary}
+            aiOptions={aiOptions}
+            processRole={processRole}
+            setProcessRole={setProcessRole}
+            processTopic={processTopic}
+            setProcessTopic={setProcessTopic}
+            handleGenerateProcess={handleGenerateProcess}
+            isProcessGenerating={isProcessGenerating}
+            processMessages={processMessages}
+            handleCreateTaskFromAI={handleCreateTaskFromAI}
+            handleSaveToSOP={handleSaveToSOP}
+            followUpText={followUpText}
+            setFollowUpText={setFollowUpText}
+            handleFollowUpProcess={handleFollowUpProcess}
+          />
         )}
 
         {/* ВКЛАДКА: РЕГЛАМЕНТЫ (SOPS) */}
         {activeTab === 'sops' && (
-          <div className="space-y-4 max-w-4xl mx-auto">
-            <h3 className={`text-lg font-bold ${textMain}`}>База Регламентов (SOP)</h3>
-            {sops.length === 0 ? (
-              <p className="text-xs text-slate-400">Сохраняйте ответы ИИ-юриста и бизнес-консультанта сюда.</p>
-            ) : null}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {sops.map(sop => (
-                <div key={sop.id} className={`p-5 rounded-2xl border flex flex-col ${cardBg}`}>
-                  <div className="flex justify-between items-start mb-3">
-                    <h4 className={`font-bold text-sm leading-snug pr-4 ${textMain}`}>{sop.title}</h4>
-                    <span className="text-[10px] text-slate-500 whitespace-nowrap">{sop.date}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 line-clamp-4 mb-4">{sop.content}</p>
-                  <div className="mt-auto flex justify-between items-center pt-3 border-t border-slate-200 dark:border-white/10">
-                    <button onClick={() => { navigator.clipboard.writeText(sop.content); toast.success('Скопировано'); }} className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center gap-1">
-                      <Copy className="w-3.5 h-3.5"/> Копировать
-                    </button>
-                    <button onClick={() => handleDeleteSOP(sop.id)} className="text-xs font-bold text-red-500 hover:text-red-400">
-                      <Trash2 className="w-3.5 h-3.5"/>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <SopView
+            sops={sops}
+            cardBg={cardBg}
+            textMain={textMain}
+            handleDeleteSOP={handleDeleteSOP}
+          />
         )}
-
-        {/* ВКЛАДКА: КОМАНДА */}
+       {/* ВКЛАДКА: КОМАНДА */}
         {activeTab === 'team' && isTeamMode && (
-          <div className="space-y-6 max-w-4xl mx-auto">
-            <div className={`p-6 rounded-3xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardBg}`}>
-              <div>
-                <h3 className={`text-base font-bold ${textMain}`}>Команда и доступы</h3>
-                <p className="text-xs text-slate-400 mt-1">Управление составом команды и ролями пользователей.</p>
-              </div>
-              <button 
-                onClick={() => setIsInviteOpen(true)} 
-                className={`px-5 py-3 rounded-2xl text-xs font-bold flex items-center gap-1.5 ${btnPrimary}`}
-              >
-                <Plus className="w-4 h-4" /> Пригласить сотрудника
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {assistants.map(ast => {
-                const activeTasksCount = tasks.filter(tItem => tItem.assigneeName === ast.name && tItem.status !== 'done').length;
-                const totalHours = tasks.filter(tItem => tItem.assigneeName === ast.name && tItem.status !== 'done').reduce((acc, curr) => acc + (parseFloat(curr.estimatedHours) || 0), 0);
-
-                return (
-                  <div key={ast.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-white flex items-center justify-center font-bold text-sm">
-                        {ast.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className={`font-bold text-sm flex items-center gap-1.5 ${textMain}`}>
-                          {ast.name} {ast.id === 'manager' && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
-                        </h4>
-                        <p className="text-xs text-slate-400">
-                          {ast.position ? `${ast.position} • ` : ''}{ast.email || 'Владелец аккаунта'}
-                          <span className="ml-2 font-semibold text-slate-600 dark:text-slate-300">
-                            ({activeTasksCount} задач • {totalHours}ч)
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400">
-                      {ast.role === 'manager' || ast.id === 'manager' ? 'Руководитель' : 'Исполнитель'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <TeamView
+            isTeamMode={isTeamMode}
+            cardBg={cardBg}
+            textMain={textMain}
+            btnPrimary={btnPrimary}
+            setIsInviteOpen={setIsInviteOpen}
+            assistants={assistants}
+            tasks={tasks}
+          />
         )}
 
         {/* ВКЛАДКА: СВОДКА */}
         {activeTab === 'kpi' && isTeamMode && (
-          <div className="space-y-6 max-w-4xl mx-auto">
-            <div className={`p-6 rounded-3xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${cardBg}`}>
-              <div>
-                <h3 className={`text-base font-bold ${textMain}`}>Сводка для руководителя</h3>
-                <p className="text-xs text-slate-400 mt-1">Автоматический ИИ-анализ эффективности и рисков компании.</p>
-              </div>
-              <button onClick={handleGenerateTeamReport} disabled={isGeneratingReport} className={`px-5 py-3 rounded-2xl text-xs font-bold ${btnPrimary}`}>
-                {isGeneratingReport ? 'Анализ...' : 'Сформировать отчет'}
-              </button>
-            </div>
-
-            {teamReport && (
-              <div className={`p-6 rounded-3xl border relative ${cardBg}`}>
-                <button onClick={handleCopyReport} className="absolute top-4 right-4 p-2 bg-slate-100 dark:bg-white/10 rounded-lg text-slate-500 dark:text-slate-300 transition-colors" title="Скопировать отчет">
-                  <Copy className="w-4 h-4" />
-                </button>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">{teamReport}</div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-4">
-              {kpis.map((kpi) => (
-                <div key={kpi.id} className={`p-5 rounded-2xl border flex justify-between items-center ${cardBg}`}>
-                  <div>
-                    <h4 className={`font-bold text-sm ${textMain}`}>{kpi.name}</h4>
-                    <p className="text-xs text-slate-400">{kpi.desc}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-2xl font-black ${textMain}`}>{kpi.score}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <KpiView
+            isTeamMode={isTeamMode}
+            isDark={isDark}
+            cardBg={cardBg}
+            textMain={textMain}
+            btnPrimary={btnPrimary}
+            handleGenerateTeamReport={handleGenerateTeamReport}
+            isGeneratingReport={isGeneratingReport}
+            teamReport={teamReport}
+            handleCopyReport={handleCopyReport}
+            kpis={companyMetrics.kpis}
+            tasks={tasks}
+            archive={archive}
+            assistants={assistants}
+          />
         )}
 
         {/* ВКЛАДКА: АРХИВ */}
         {activeTab === 'archive' && (
-          <div className="space-y-4 max-w-4xl mx-auto">
-            <h3 className={`text-lg font-bold ${textMain}`}>Выполненные задачи</h3>
-            {archive.length === 0 ? (
-              <p className="text-xs text-slate-400">Архив пуст.</p>
-            ) : (
-              archive.map(task => (
-                <div key={task.id} className={`p-4 rounded-2xl border flex justify-between items-center ${cardBg}`}>
-                  <span className="text-sm font-semibold line-through text-slate-400">{task.text}</span>
-                  <button onClick={() => handleQuickMove(task.id, 'todo')} className="text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">Восстановить</button>
-                </div>
-              ))
-            )}
-          </div>
+          <ArchiveView
+            archive={archive}
+            cardBg={cardBg}
+            textMain={textMain}
+            handleQuickMove={handleQuickMove}
+          />
         )}
-
       </div>
 
       {/* МОДАЛЬНОЕ ОКНО СОЗДАНИЯ / РЕДАКТИРОВАНИЯ ЗАДАЧИ */}
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4">
-          <div className={`w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-6 border shadow-2xl max-h-[90vh] overflow-y-auto ${cardBg}`}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className={`text-base font-bold ${textMain}`}>{selectedTask ? 'Редактирование задачи' : 'Новая задача'}</h3>
-              <button onClick={closeModal} className="text-slate-400 font-bold hover:text-slate-200"><X className="w-5 h-5" /></button>
-            </div>
-
-            {/* БЛОК БЫСТРЫХ ШАБЛОНОВ */}
-            {!selectedTask && (
-              <div className="mb-4">
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Быстрый запуск пакета задач</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {taskTemplates.map((tmpl) => (
-                    <button
-                      key={tmpl.id}
-                      type="button"
-                      onClick={() => handleApplyTemplate(tmpl)}
-                      className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-slate-400 text-left text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 bg-slate-50 dark:bg-white/5"
-                    >
-                      <span className="text-base">{tmpl.icon}</span>
-                      <span className="truncate">{tmpl.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveTask} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Название задачи</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={newTaskTitle} 
-                    onChange={(e) => setNewTaskTitle(e.target.value)} 
-                    placeholder="Что нужно сделать?" 
-                    required 
-                    className={`flex-1 p-3.5 rounded-xl outline-none border text-sm font-medium ${inputBg}`} 
-                  />
-                  <button 
-                    type="button" 
-                    onClick={toggleVoiceInput} 
-                    className={`w-12 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${isListening ? 'bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/40' : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300'}`}
-                  >
-                    <Mic className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <div className="flex gap-2 mt-2">
-                  <button type="button" onClick={() => handleTaskAI('expand')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Расписать ИИ
-                  </button>
-                  <button type="button" onClick={() => handleTaskAI('decompose')} disabled={isTaskGenerating || !newTaskTitle} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300 text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Чек-лист ИИ
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Описание / ТЗ</label>
-                <textarea value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} rows="4" className={`w-full p-3.5 rounded-xl outline-none border text-xs resize-none ${inputBg}`} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Оценка (часы)</label>
-                  <input type="number" step="0.5" value={newTaskHours} onChange={(e) => setNewTaskHours(e.target.value)} placeholder="1.5" className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Дедлайн</label>
-                  <input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`} />
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setNewUrgent(!newUrgent)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newUrgent ? 'bg-red-500/10 border-red-500 text-red-500' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
-                  <Flame className="w-3.5 h-3.5" /> Срочно
-                </button>
-                <button type="button" onClick={() => setNewImportant(!newImportant)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 ${newImportant ? 'bg-blue-500/10 border-blue-500 text-blue-500' : 'border-slate-200 dark:border-white/10 text-slate-400'}`}>
-                  <Gem className="w-3.5 h-3.5" /> Важно
-                </button>
-              </div>
-
-              {isTeamMode && (
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Исполнитель</label>
-                  <select value={newTaskAssignee} onChange={(e) => setNewTaskAssignee(e.target.value)} className={`w-full p-3 rounded-xl outline-none border text-xs ${inputBg}`}>
-                    {assistants.map(a => <option key={a.id} value={a.id}>{a.name} ({a.position || 'Сотрудник'})</option>)}
-                  </select>
-                </div>
-              )}
-
-              <button type="submit" className={`w-full py-3.5 rounded-2xl text-xs font-bold ${btnPrimary}`}>
-                Сохранить задачу
-              </button>
-
-              {selectedTask && (
-                <button type="button" onClick={() => handleDeleteTask(selectedTask.id)} className="w-full py-2 text-xs font-bold text-red-500 hover:text-red-400 text-center flex items-center justify-center gap-1">
-                  <Trash2 className="w-3.5 h-3.5" /> Удалить задачу
-                </button>
-              )}
-            </form>
-          </div>
-        </div>
-      )}
+      <TaskModal
+        isOpen={isCreateOpen}
+        onClose={closeModal}
+        selectedTask={selectedTask}
+        taskTemplates={taskTemplates}
+        handleApplyTemplate={handleApplyTemplate}
+        handleSaveTask={handleSaveTask}
+        newTaskTitle={newTaskTitle}
+        setNewTaskTitle={setNewTaskTitle}
+        toggleVoiceInput={toggleVoiceInput}
+        isListening={isListening}
+        handleTaskAI={handleTaskAI}
+        isTaskGenerating={isTaskGenerating}
+        newTaskDesc={newTaskDesc}
+        setNewTaskDesc={setNewTaskDesc}
+        newTaskExpectedResult={newTaskExpectedResult}
+        setNewTaskExpectedResult={setNewTaskExpectedResult}
+        newTaskHours={newTaskHours}
+        setNewTaskHours={setNewTaskHours}
+        newTaskDueDate={newTaskDueDate}
+        setNewTaskDueDate={setNewTaskDueDate}
+        newUrgent={newUrgent}
+        setNewUrgent={setNewUrgent}
+        newImportant={newImportant}
+        setNewImportant={setNewImportant}
+        isTeamMode={isTeamMode}
+        newTaskAssignee={newTaskAssignee}
+        setNewTaskAssignee={setNewTaskAssignee}
+        assistants={assistants}
+        handleDeleteTask={handleDeleteTask}
+        cardBg={cardBg}
+        textMain={textMain}
+        inputBg={inputBg}
+        btnPrimary={btnPrimary}
+      />
 
       {/* МОДАЛЬНОЕ ОКНО ПРИГЛАШЕНИЯ СОТРУДНИКА */}
-      {isInviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className={`w-full max-w-sm rounded-3xl p-6 border shadow-2xl ${cardBg}`}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className={`text-base font-bold ${textMain}`}>Пригласить сотрудника</h3>
-              <button onClick={() => setIsInviteOpen(false)} className="text-slate-400 font-bold"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleInviteColleague} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Email сотрудника</label>
-                <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="colleague@company.com" required className={`w-full p-3.5 rounded-xl outline-none border text-xs ${inputBg}`} autoFocus />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Должность</label>
-                <input type="text" value={invitePosition} onChange={(e) => setInvitePosition(e.target.value)} placeholder="Например: Дизайнер, Копирайтер" className={`w-full p-3.5 rounded-xl outline-none border text-xs ${inputBg}`} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Роль</label>
-                <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} className={`w-full p-3.5 rounded-xl outline-none border text-xs ${inputBg}`}>
-                  <option value="worker">Исполнитель (Свои задачи)</option>
-                  <option value="manager">Руководитель (Полный доступ)</option>
-                </select>
-              </div>
-              <button type="submit" className={`w-full py-3.5 rounded-2xl text-xs font-bold ${btnPrimary}`}>
-                Отправить приглашение
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      <InviteModal
+        isOpen={isInviteOpen}
+        onClose={() => setIsInviteOpen(false)}
+        inviteEmail={inviteEmail}
+        setInviteEmail={setInviteEmail}
+        invitePosition={invitePosition}
+        setInvitePosition={setInvitePosition}
+        inviteRole={inviteRole}
+        setInviteRole={setInviteRole}
+        onSubmit={handleInviteColleague}
+        cardBg={cardBg}
+        textMain={textMain}
+        inputBg={inputBg}
+        btnPrimary={btnPrimary}
+      />
 
       {/* МОДАЛЬНОЕ ОКНО НАСТРОЙКИ РЕЖИМА И ПАРТНЕРСКИХ ПРОМОКОДОВ */}
-      {showOnboarding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className={`w-full max-w-sm rounded-3xl p-6 border ${cardBg}`}>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className={`text-lg font-bold ${textMain}`}>Настройки аккаунта</h3>
-              <button onClick={() => setShowOnboarding(false)} className="text-slate-400 font-bold"><X className="w-5 h-5" /></button>
-            </div>
-            
-            <p className="text-xs text-slate-400 mb-4">Выберите формат работы для адаптации интерфейса.</p>
-            
-            <div className="space-y-2 mb-6">
-              {['👤 Я один', '👥 2-5 человек', '🏢 Больше 5 человек'].map(size => (
-                <button 
-                  key={size} 
-                  onClick={() => setOnboardTeam(size)}
-                  className={`w-full p-3 rounded-xl border text-xs font-bold text-left transition-all ${onboardTeam === size ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-sm' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5'}`}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onboardTeam={onboardTeam}
+        setOnboardTeam={setOnboardTeam}
+        promoInput={promoInput}
+        setPromoInput={setPromoInput}
+        handleApplyPromo={handleApplyPromo}
+        isApplyingPromo={isApplyingPromo}
+        docData={docData}
+        tgChatId={tgChatId}
+        setTgChatId={setTgChatId}
+        handleSaveSettings={handleSaveSettings}
+        cardBg={cardBg}
+        textMain={textMain}
+        inputBg={inputBg}
+        btnPrimary={btnPrimary}
+      />
 
-            {/* БЛОК АВТОМАТИЗАЦИЙ */}
-            <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">Правила автоматизаций</label>
-              <div className="space-y-2">
-                {defaultAutomations.map((rule) => (
-                  <div key={rule.id} className="p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{rule.name}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold">Активно</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* БЛОК АКТИВАЦИИ ПРОМОКОДА ПАРТНЕРА */}
-            <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
-                <Tag className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Промокод партнера
-              </label>
-              
-              {docData?.appliedPromo ? (
-                <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 dark:bg-white/10 dark:border-white/20 dark:text-white text-xs font-bold flex items-center gap-2">
-                  <Award className="w-4 h-4" /> Активирован код: {docData.appliedPromo} (PRO)
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={promoInput} 
-                    onChange={(e) => setPromoInput(e.target.value)} 
-                    placeholder="Например: CRISIS2026" 
-                    className={`flex-1 p-3 rounded-xl outline-none border text-xs font-semibold ${inputBg}`} 
-                  />
-                  <button 
-                    onClick={handleApplyPromo} 
-                    disabled={isApplyingPromo || !promoInput.trim()} 
-                    className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 font-bold text-xs rounded-xl transition-all disabled:opacity-50"
-                  >
-                    {isApplyingPromo ? '...' : 'Ввод'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* БЛОК TELEGRAM УВЕДОМЛЕНИЙ */}
-            <div className="pt-4 border-t border-slate-200 dark:border-white/10 mb-6">
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
-                <MessageCircle className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Telegram Уведомления
-              </label>
-              <input 
-                type="text" 
-                value={tgChatId} 
-                onChange={(e) => setTgChatId(e.target.value)} 
-                placeholder="Ваш Telegram Chat ID" 
-                className={`w-full p-3 rounded-xl outline-none border text-xs font-semibold ${inputBg}`} 
-              />
-              <p className="text-[9px] text-slate-400 mt-1">Вставьте ваш Chat ID для получения уведомлений от бота.</p>
-            </div>
-
-            <button onClick={handleSaveSettings} className={`w-full py-3.5 rounded-xl text-xs font-bold ${btnPrimary}`}>
-              Сохранить изменения
-            </button>
-          </div>
-        </div>
-      )}
+      {/* МОДАЛЬНОЕ ОКНО ОНБОРДИНГА */}
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        cardBg={cardBg}
+        textMain={textMain}
+        btnPrimary={btnPrimary}
+      />
 
     </div>
   );
 }
+
+
+// ==========================================
