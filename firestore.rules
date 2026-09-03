@@ -1,0 +1,103 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function memberDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
+    }
+
+    function isCompanyMember(companyId) {
+      return signedIn() && exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
+    }
+
+    function companyRole(companyId) {
+      return memberDoc(companyId).data.role;
+    }
+
+    function isCompanyManager(companyId) {
+      return isCompanyMember(companyId) && companyRole(companyId) in ['owner', 'manager'];
+    }
+
+    function isCompanyOwner(companyId) {
+      return isCompanyMember(companyId) && companyRole(companyId) == 'owner';
+    }
+
+    // Public user profile is private to the account owner.
+    match /users/{uid} {
+      allow read, create, update: if isSelf(uid);
+      allow delete: if false;
+
+      // My Space is physically isolated from Company Space.
+      match /personalTasks/{taskId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+    }
+
+    match /companies/{companyId} {
+      allow read: if isCompanyMember(companyId);
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isCompanyOwner(companyId);
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if isCompanyMember(companyId);
+        allow create, update, delete: if isCompanyOwner(companyId);
+      }
+
+      match /tasks/{taskId} {
+        // Managers see company tasks. Members only see tasks assigned to them
+        // or tasks they created. My Space tasks never live here.
+        allow read: if isCompanyManager(companyId)
+          || (isCompanyMember(companyId)
+            && (resource.data.assigneeId == request.auth.uid
+              || resource.data.createdBy == request.auth.uid));
+
+        allow create: if isCompanyMember(companyId)
+          && request.resource.data.companyId == companyId
+          && request.resource.data.createdBy == request.auth.uid;
+
+        allow update: if isCompanyManager(companyId)
+          || (isCompanyMember(companyId)
+            && resource.data.assigneeId == request.auth.uid
+            && request.resource.data.companyId == resource.data.companyId
+            && request.resource.data.createdBy == resource.data.createdBy);
+
+        allow delete: if isCompanyManager(companyId)
+          || (isCompanyMember(companyId) && resource.data.createdBy == request.auth.uid);
+      }
+
+      match /sops/{sopId} {
+        allow read: if isCompanyMember(companyId);
+        allow create, update, delete: if isCompanyManager(companyId);
+      }
+
+      match /automations/{automationId} {
+        allow read: if isCompanyMember(companyId);
+        allow create, update, delete: if isCompanyManager(companyId);
+      }
+    }
+
+    // Invite documents are intentionally server-managed only.
+    match /companyInvites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    // Legacy collections are denied in the new model. Keep these rules only
+    // after migration has been completed and verified.
+    match /user_mappings/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
