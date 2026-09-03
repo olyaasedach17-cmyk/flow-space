@@ -5,9 +5,11 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  query,
   serverTimestamp,
   setDoc,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ROLES } from '../utils/workspaceUtils';
@@ -28,6 +30,12 @@ const mapSnapshot = (snapshot) => snapshot.docs.map((item) => {
     completedAt: normalizeTimestamp(data.completedAt)
   };
 });
+
+const mergeTaskLists = (...lists) => {
+  const byId = new Map();
+  lists.flat().forEach((task) => byId.set(task.id, task));
+  return Array.from(byId.values());
+};
 
 export async function ensureUserProfile(user) {
   if (!user?.uid) throw new Error('User is required');
@@ -105,13 +113,40 @@ export function subscribePersonalTasks(uid, onData, onError) {
   );
 }
 
-export function subscribeCompanyTasks(companyId, onData, onError) {
-  if (!companyId) return () => {};
-  return onSnapshot(
-    collection(db, 'companies', companyId, 'tasks'),
-    (snapshot) => onData(mapSnapshot(snapshot)),
+export function subscribeCompanyTasks(companyId, uid, role, onData, onError) {
+  if (!companyId || !uid) return () => {};
+
+  const tasksRef = collection(db, 'companies', companyId, 'tasks');
+  if (role === ROLES.OWNER || role === ROLES.MANAGER) {
+    return onSnapshot(tasksRef, (snapshot) => onData(mapSnapshot(snapshot)), onError);
+  }
+
+  let assignedTasks = [];
+  let createdTasks = [];
+  const emit = () => onData(mergeTaskLists(assignedTasks, createdTasks));
+
+  const unsubscribeAssigned = onSnapshot(
+    query(tasksRef, where('assigneeId', '==', uid)),
+    (snapshot) => {
+      assignedTasks = mapSnapshot(snapshot);
+      emit();
+    },
     onError
   );
+
+  const unsubscribeCreated = onSnapshot(
+    query(tasksRef, where('createdBy', '==', uid)),
+    (snapshot) => {
+      createdTasks = mapSnapshot(snapshot);
+      emit();
+    },
+    onError
+  );
+
+  return () => {
+    unsubscribeAssigned();
+    unsubscribeCreated();
+  };
 }
 
 export function subscribeCompanyMembers(companyId, onData, onError) {
