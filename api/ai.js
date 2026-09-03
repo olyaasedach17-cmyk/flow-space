@@ -1,37 +1,66 @@
 // api/ai.js - Vercel Serverless Function
 export default async function handler(req, res) {
-  // Разрешаем только POST запросы
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Ключ берется из переменных окружения сервера
-  const apiKey = process.env.PROXYAPI_KEY || process.env.OPENAI_API_KEY;
+  // Polza API key from Vercel Environment Variables.
+  // PROXYAPI_KEY is kept as a temporary fallback so the current deployment
+  // does not break before POLZA_API_KEY is added in Vercel.
+  const apiKey = process.env.POLZA_API_KEY || process.env.PROXYAPI_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({ error: 'API key is not configured on the server.' });
+    return res.status(500).json({
+      error: 'POLZA_API_KEY is not configured on the server.'
+    });
   }
 
   try {
-    const { model = 'gpt-4o-mini', messages, temperature = 0.5 } = req.body;
+    const { model = 'gpt-4o-mini', messages, temperature = 0.5 } = req.body || {};
 
-    const response = await fetch('https://api.proxyapi.ru/openai/v1/chat/completions', {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'messages must be a non-empty array.' });
+    }
+
+    const response = await fetch('https://polza.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({ model, messages, temperature })
     });
 
-    const data = await response.json();
+    const raw = await response.text();
+    let data;
+
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      data = { raw };
+    }
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: data.error?.message || 'AI Proxy Error' });
+      const providerMessage =
+        data?.error?.message ||
+        data?.message ||
+        data?.detail ||
+        data?.error ||
+        raw ||
+        'Unknown Polza API error';
+
+      console.error('Polza API error:', response.status, providerMessage);
+
+      return res.status(response.status).json({
+        error: `Polza API error (${response.status}): ${providerMessage}`
+      });
     }
 
     return res.status(200).json(data);
   } catch (error) {
-    return res.status(500).json({ error: 'Internal Server Error: ' + error.message });
+    console.error('AI handler error:', error);
+    return res.status(500).json({
+      error: 'Internal Server Error: ' + error.message
+    });
   }
 }
