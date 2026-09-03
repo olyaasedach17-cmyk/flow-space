@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -19,6 +20,10 @@ function getAdminApp() {
   return initializeApp({
     credential: cert(serviceAccount)
   });
+}
+
+export function getAdminDb() {
+  return getFirestore(getAdminApp());
 }
 
 export async function requireFirebaseUser(req) {
