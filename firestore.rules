@@ -10,6 +10,10 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function companyDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId));
+    }
+
     function memberDoc(companyId) {
       return get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
     }
@@ -30,31 +34,41 @@ service cloud.firestore {
       return isCompanyMember(companyId) && companyRole(companyId) == 'owner';
     }
 
-    // Public user profile is private to the account owner.
+    function isOwnerBootstrap(companyId, uid) {
+      return signedIn()
+        && uid == request.auth.uid
+        && companyDoc(companyId).data.ownerId == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role == 'owner';
+    }
+
     match /users/{uid} {
       allow read, create, update: if isSelf(uid);
       allow delete: if false;
 
       // My Space is physically isolated from Company Space.
       match /personalTasks/{taskId} {
-        allow read, create, update, delete: if isSelf(uid);
+        allow read, create, update, delete: if isSelf(uid)
+          && (request.method != 'create' || request.resource.data.ownerId == request.auth.uid)
+          && (request.method == 'create' || resource.data.ownerId == request.auth.uid);
       }
     }
 
     match /companies/{companyId} {
       allow read: if isCompanyMember(companyId);
-      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isCompanyOwner(companyId);
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isCompanyOwner(companyId)
+        && request.resource.data.ownerId == resource.data.ownerId;
       allow delete: if false;
 
       match /members/{uid} {
         allow read: if isCompanyMember(companyId);
-        allow create, update, delete: if isCompanyOwner(companyId);
+        allow create: if isCompanyOwner(companyId) || isOwnerBootstrap(companyId, uid);
+        allow update, delete: if isCompanyOwner(companyId) && uid != request.auth.uid;
       }
 
       match /tasks/{taskId} {
-        // Managers see company tasks. Members only see tasks assigned to them
-        // or tasks they created. My Space tasks never live here.
         allow read: if isCompanyManager(companyId)
           || (isCompanyMember(companyId)
             && (resource.data.assigneeId == request.auth.uid
@@ -85,13 +99,12 @@ service cloud.firestore {
       }
     }
 
-    // Invite documents are intentionally server-managed only.
+    // Invite documents are server-managed only.
     match /companyInvites/{inviteId} {
       allow read, write: if false;
     }
 
-    // Legacy collections are denied in the new model. Keep these rules only
-    // after migration has been completed and verified.
+    // Legacy mapping is disabled after migration.
     match /user_mappings/{document=**} {
       allow read, write: if false;
     }
