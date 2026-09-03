@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders the sign-in screen', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /flow space/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /войти в систему/i })).toBeInTheDocument();
 });
