@@ -1,0 +1,113 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function memberPath(companyId, uid) { return /databases/$(database)/documents/companies/$(companyId)/members/$(uid); }
+    function isCompanyMember(companyId) { return signedIn() && exists(memberPath(companyId, request.auth.uid)); }
+    function companyRole(companyId) { return get(memberPath(companyId, request.auth.uid)).data.role; }
+    function companyDepartment(companyId) { return get(memberPath(companyId, request.auth.uid)).data.departmentId; }
+    function isCompanyManager(companyId) { return isCompanyMember(companyId) && companyRole(companyId) in ['owner', 'manager']; }
+    function isCompanyOwner(companyId) { return isCompanyMember(companyId) && companyRole(companyId) == 'owner'; }
+    function isDepartmentManager(companyId) { return isCompanyMember(companyId) && companyRole(companyId) == 'manager' && companyDepartment(companyId) != null && companyDepartment(companyId) != ''; }
+
+    match /users/{uid} {
+      allow read: if isSelf(uid);
+      allow create: if isSelf(uid) && request.resource.data.uid == uid;
+      allow update: if isSelf(uid) && request.resource.data.uid == uid;
+      allow delete: if false;
+
+      match /personalTasks/{taskId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+    }
+
+    match /companies/{companyId} {
+      // Bootstrap: the owner can check their own company before membership exists.
+      allow get: if isCompanyMember(companyId) || (
+        isSelf(companyId) && (
+          !exists(/databases/$(database)/documents/companies/$(companyId)) ||
+          resource.data.ownerId == request.auth.uid
+        )
+      );
+      allow list: if isCompanyMember(companyId);
+      allow create: if isSelf(companyId) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.subscription.plan == 'free' &&
+        request.resource.data.subscription.status == 'active';
+      allow update: if (
+        isCompanyOwner(companyId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'settings', 'kpis', 'savedTime', 'updatedAt', 'migration', 'legacyAppliedPromo'
+        ])
+      ) || (
+        isDepartmentManager(companyId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['kpis', 'savedTime', 'updatedAt'])
+      );
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if isCompanyMember(companyId);
+        allow create: if signedIn() && (
+          isCompanyOwner(companyId) ||
+          (
+            uid == request.auth.uid &&
+            request.resource.data.role == 'owner' &&
+            get(/databases/$(database)/documents/companies/$(companyId)).data.ownerId == request.auth.uid
+          )
+        );
+        allow update, delete: if isCompanyOwner(companyId);
+      }
+
+      // Company AI uses the authenticated server API. No direct client writes.
+      match /aiAgents/{agentId} { allow read, write: if false; }
+      match /aiInsights/{insightId} { allow read, write: if false; }
+      match /activity/{eventId} { allow read, write: if false; }
+      match /approvals/{approvalId} { allow read, write: if false; }
+      match /metrics/{metricId} { allow read, write: if false; }
+      match /aiAudit/{eventId} { allow read, write: if false; }
+
+      match /tasks/{taskId} {
+        allow read: if isCompanyOwner(companyId) ||
+          (isDepartmentManager(companyId) && resource.data.departmentId == companyDepartment(companyId)) ||
+          (isCompanyMember(companyId) && resource.data.assigneeId == request.auth.uid);
+
+        allow create: if isCompanyOwner(companyId) ||
+          (isDepartmentManager(companyId) && request.resource.data.departmentId == companyDepartment(companyId)) ||
+          (isCompanyMember(companyId) && request.resource.data.assigneeId == request.auth.uid && request.resource.data.departmentId == companyDepartment(companyId));
+
+        // Руководитель может менять всю рабочую карточку.
+        // Сотрудник может менять только исполнение своей задачи и не может сам себя "принять".
+        allow update: if isCompanyOwner(companyId) ||
+          (isDepartmentManager(companyId) && resource.data.departmentId == companyDepartment(companyId) && request.resource.data.departmentId == companyDepartment(companyId)) || (
+          isCompanyMember(companyId) &&
+          resource.data.assigneeId == request.auth.uid &&
+          request.resource.data.assigneeId == request.auth.uid &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'resultArtifact', 'submittedAt', 'updatedAt', 'actualMinutes',
+            'reviewAttempts', 'reviewHistory', 'aiAgentId', 'aiExecutionHistory'
+          ]) &&
+          (
+            (resource.data.status == 'todo' && request.resource.data.status in ['todo', 'in_progress', 'review', 'deferred']) ||
+            (resource.data.status == 'in_progress' && request.resource.data.status in ['in_progress', 'review', 'deferred']) ||
+            (resource.data.status == 'deferred' && request.resource.data.status in ['deferred', 'todo', 'in_progress']) ||
+            (resource.data.status == 'review' && request.resource.data.status == 'review')
+          )
+        );
+
+        allow delete: if isCompanyOwner(companyId) ||
+          (isDepartmentManager(companyId) && resource.data.departmentId == companyDepartment(companyId));
+      }
+
+      match /sops/{sopId} {
+        allow read: if isCompanyMember(companyId);
+        allow create, update, delete: if isCompanyManager(companyId);
+      }
+    }
+
+    match /companyInvites/{inviteId} { allow read, write: if false; }
+    match /user_mappings/{mappingId} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,15 @@
+node_modules
+node_modules 2
+build
+build-*
+.deps-recovery
+.tools
+tests
+examples
+.env
+.env.*
+.vercel
+.vercel-global
+coverage
+*.log
+.DS_Store
