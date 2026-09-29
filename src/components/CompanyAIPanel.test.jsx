@@ -1,0 +1,10 @@
+import React from 'react';
+import {render,screen,fireEvent,waitFor} from '@testing-library/react';
+import CompanyAIPanel from './CompanyAIPanel';
+import {companyAIRequest} from '../services/companyAIService';
+jest.mock('../services/companyAIService',()=>({companyAIRequest:jest.fn()}));
+const insight={id:'i',agentId:'sales',status:'new',title:'Партнёрство',summary:'Гипотеза',suggestedAction:{title:'Подготовить предложение',expectedResult:'Черновик',successCriteria:[]}};
+beforeEach(()=>companyAIRequest.mockReset());
+test('loading, error and retry are visible',async()=>{companyAIRequest.mockRejectedValue(new Error('Сервис недоступен'));render(<CompanyAIPanel companyId="a" role="owner" onSettings={()=>{}}/>);expect(screen.getByText('Выполняется запрос…')).toBeInTheDocument();expect(await screen.findByRole('alert')).toHaveTextContent('Сервис недоступен');expect(screen.getByText('Обновить')).toBeEnabled();});
+test('task conversion occurs only after explicit confirmation',async()=>{companyAIRequest.mockResolvedValue({agents:[],insights:[insight]});render(<CompanyAIPanel companyId="a" role="owner" onSettings={()=>{}}/>);fireEvent.click(await screen.findByText('Создать задачу'));expect(screen.getByRole('dialog')).toBeInTheDocument();expect(companyAIRequest).toHaveBeenCalledTimes(1);fireEvent.click(screen.getByText('Отмена'));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();fireEvent.click(screen.getByText('Создать задачу'));fireEvent.click(screen.getByText('Подтвердить создание'));await waitFor(()=>expect(companyAIRequest).toHaveBeenCalledWith('a','convert',{insightId:'i',confirm:true}));});
+test('CEO card is hidden for manager',async()=>{companyAIRequest.mockResolvedValue({agents:[],insights:[]});render(<CompanyAIPanel companyId="a" role="manager" onSettings={()=>{}}/>);await screen.findByText('Результатов пока нет. Создайте агента и запустите его.');expect(screen.queryByText('AI CEO Assistant')).not.toBeInTheDocument();expect(screen.getByText('AI Sales')).toBeInTheDocument();});

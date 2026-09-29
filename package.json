@@ -9,19 +9,25 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "firebase": "^12.16.0",
-    "firebase-admin": "^14.2.0",
+    "firebase-admin": "^13.5.0",
     "lucide-react": "^1.31.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-scripts": "5.0.1",
+    "recharts": "^3.10.1",
     "sonner": "^2.0.8",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "test:server": "node --test tests/*.test.mjs",
+    "test:rules": "CI=1 XDG_CONFIG_HOME=./.tools/config FIREBASE_EMULATORS_PATH=./.tools/firebase-emulators JAVA_HOME=./.tools/jre/Contents/Home PATH=./.tools/jre/Contents/Home/bin:$PATH firebase emulators:exec --only firestore --project demo-flow-space-rules 'node --test tests/firestore-rules.rules.mjs'",
+    "check:env": "node scripts/check-env.mjs",
+    "test:roles-live": "node scripts/test-live-roles.mjs",
+    "eject": "react-scripts eject",
+    "start:local": "node scripts/local-server.mjs"
   },
   "eslintConfig": {
     "extends": [
@@ -42,6 +48,7 @@
     ]
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "autoprefixer": "^10.5.4",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19"

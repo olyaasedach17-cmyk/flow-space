@@ -1,0 +1,12 @@
+node_modules
+node_modules 2
+build
+build-*
+.deps-recovery
+.env
+.env.*
+.vercel
+.vercel-global
+coverage
+*.log
+.DS_Store
