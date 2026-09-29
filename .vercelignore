@@ -3,6 +3,9 @@ node_modules 2
 build
 build-*
 .deps-recovery
+.tools
+tests
+examples
 .env
 .env.*
 .vercel
